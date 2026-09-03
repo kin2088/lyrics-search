@@ -136,6 +136,12 @@
             font-weight: 400;
             color: #475569;
         }
+        .search-keyword-display {
+            font-size: 13px;
+            color: #64748b;
+            margin-left: 10px;
+            font-weight: 400;
+        }
         .card {
             background: #fafbfc;
             border: 1px solid #edf2f7;
@@ -318,7 +324,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v2.1</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v2.2</span></h1>
         <div class="subtitle">
             ✅ 网易云音乐歌词搜索 · 独立翻译微服务（已部署）
             <br />
@@ -347,6 +353,7 @@
             <div class="section-title">
                 📀 请选择专辑
                 <span class="badge" id="albumCount">0 个结果</span>
+                <span class="search-keyword-display" id="searchKeywordDisplay"></span>
             </div>
             <div class="card" id="albumList"></div>
         </div>
@@ -390,17 +397,15 @@
         </div>
 
         <div class="footer">
-            数据来源：网易云音乐 · 翻译：独立微服务 · 仅供内部采购使用
+            数据来源：网易云音乐 · 翻译：独立翻译微服务 · 仅供内部采购使用
         </div>
     </div>
 
     <script>
         // ================================================================
-        //  ★★★ 你的专属API地址 ★★★
+        //  ★★★ 配置 ★★★
         // ================================================================
         const API_BASE = 'https://my-music-api.vercel.app/';
-
-        // ★★★ 独立的翻译微服务地址（已部署成功） ★★★
         const TRANSLATE_PROXY = 'https://translate-service-nu.vercel.app/translate';
 
         document.getElementById('apiDisplay').textContent = API_BASE;
@@ -420,6 +425,7 @@
         const albumSection = document.getElementById('albumSection');
         const albumList = document.getElementById('albumList');
         const albumCount = document.getElementById('albumCount');
+        const searchKeywordDisplay = document.getElementById('searchKeywordDisplay');
         const songSection = document.getElementById('songSection');
         const songTableBody = document.getElementById('songTableBody');
         const songCount = document.getElementById('songCount');
@@ -521,14 +527,8 @@
             try {
                 const response = await fetch(TRANSLATE_PROXY, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        text: text,
-                        source: 'en',
-                        target: 'zh'
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text, source: 'en', target: 'zh' })
                 });
                 if (!response.ok) {
                     console.error('翻译服务响应错误:', response.status);
@@ -549,14 +549,20 @@
         async function doSearch() {
             const albumKeyword = albumInput.value.trim();
             const artistKeyword = artistInput.value.trim();
+
             if (!albumKeyword) {
                 showToast('请输入专辑名称', 'error');
                 return;
             }
 
+            // 显示当前搜索的关键词（调试用）
+            console.log('🔎 搜索关键词:', albumKeyword);
+            console.log('🎤 歌手过滤:', artistKeyword || '无');
+
             hideToast();
             searchBtn.disabled = true;
             searchBtn.textContent = '⏳ 搜索中...';
+
             albumSection.style.display = 'none';
             songSection.style.display = 'none';
             currentAlbums = [];
@@ -564,7 +570,9 @@
             currentLyrics = {};
 
             try {
+                // 直接用专辑名搜索（不拼接歌手，避免干扰）
                 const albums = await searchAlbums(albumKeyword);
+
                 if (!albums || albums.length === 0) {
                     showToast('未找到相关专辑，请尝试更换关键词', 'error');
                     searchBtn.disabled = false;
@@ -572,6 +580,7 @@
                     return;
                 }
 
+                // 如果填写了歌手名，进行过滤（大小写不敏感）
                 let filtered = albums;
                 if (artistKeyword) {
                     const lowerArtist = artistKeyword.toLowerCase();
@@ -581,6 +590,7 @@
                         return names.some(n => n.includes(lowerArtist)) || artistName.includes(lowerArtist);
                     });
                     if (filtered.length === 0) {
+                        // 过滤结果为空时显示全部，并提示
                         filtered = albums;
                         showToast(`未找到歌手"${artistKeyword}"相关结果，显示全部 ${albums.length} 个专辑`, 'info');
                     } else {
@@ -590,8 +600,9 @@
                     showToast(`找到 ${albums.length} 个相关专辑，请点击选择`, 'success');
                 }
 
-                renderAlbumList(filtered);
+                renderAlbumList(filtered, albumKeyword);
                 albumSection.style.display = 'block';
+
             } catch (err) {
                 console.error(err);
                 showToast('搜索失败：' + err.message, 'error');
@@ -601,15 +612,19 @@
             }
         }
 
-        function renderAlbumList(albums) {
+        function renderAlbumList(albums, keyword) {
             albumList.innerHTML = '';
             albumCount.textContent = `${albums.length} 个结果`;
+            // 显示搜索关键词
+            searchKeywordDisplay.textContent = `搜索词: "${keyword}"`;
+
             albums.forEach((alb, index) => {
                 const div = document.createElement('div');
                 div.className = 'card-item';
                 const artistName = alb.artist?.name || alb.artists?.map(a => a.name).join('/') || '未知歌手';
                 const name = alb.name || '未命名专辑';
                 const year = alb.publishTime ? new Date(alb.publishTime).getFullYear() : '';
+
                 div.innerHTML = `
                     <span style="font-weight:500; min-width:28px;">${index + 1}</span>
                     <span style="font-weight:500;">${name}</span>
@@ -674,7 +689,7 @@
         }
 
         /**
-         * ★★★ 核心函数：加载歌词 + 调用独立翻译服务 ★★★
+         * 核心函数：加载歌词 + 调用翻译
          */
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
             const allRows = songTableBody.querySelectorAll('.clickable-row');
@@ -788,13 +803,17 @@
             });
         }
 
+        // ================================================================
+        //  事件绑定
+        // ================================================================
+
         searchBtn.addEventListener('click', doSearch);
         albumInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
         artistInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
         exportCsvBtn.addEventListener('click', exportCsv);
         copyAllBtn.addEventListener('click', copyAllLyrics);
 
-        console.log('🎵 音像采购工作台 v2.1 已加载（独立翻译服务）');
+        console.log('🎵 音像采购工作台 v2.2 已加载');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
