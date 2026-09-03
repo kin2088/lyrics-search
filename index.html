@@ -318,14 +318,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.1</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.2</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 集成 LibreTranslate 免费翻译
+            ✅ 网易云音乐歌词搜索 · 集成 MyMemory 免费翻译
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 官方译文优先 · 无官方译文时自动翻译（免费，无需密钥）
+                💡 官方译文优先 · 无官方译文时自动翻译（免费，无需密钥，支持跨域）
             </span>
         </div>
 
@@ -390,7 +390,7 @@
         </div>
 
         <div class="footer">
-            数据来源：网易云音乐 · 翻译：LibreTranslate · 仅供内部采购使用
+            数据来源：网易云音乐 · 翻译：MyMemory · 仅供内部采购使用
         </div>
     </div>
 
@@ -400,8 +400,9 @@
         // ================================================================
         const API_BASE = 'https://my-music-api.vercel.app/';
 
-        // ★★★ LibreTranslate 公共实例（免费，无需密钥，支持跨域） ★★★
-        const TRANSLATE_API_URL = 'https://libretranslate.de/translate';
+        // ★★★ MyMemory 翻译 API（免费，无需密钥，支持跨域） ★★★
+        // 使用说明：https://mymemory.translated.net/doc/spec.php
+        const TRANSLATE_API_URL = 'https://api.mymemory.translated.net/get';
 
         document.getElementById('apiDisplay').textContent = API_BASE;
 
@@ -648,7 +649,7 @@
         }
 
         /**
-         * ★★★ 核心函数：加载歌词 + 智能翻译（使用 LibreTranslate） ★★★
+         * ★★★ 核心函数：加载歌词 + 智能翻译（使用 MyMemory API） ★★★
          */
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
             const allRows = songTableBody.querySelectorAll('.clickable-row');
@@ -681,22 +682,14 @@
                         if (!isChinese(lyricText)) {
                             lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ 翻译中...</span>';
                             try {
-                                const response = await fetch(TRANSLATE_API_URL, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        q: lyricText,
-                                        source: 'en',
-                                        target: 'zh'
-                                    })
-                                });
-
+                                // 调用 MyMemory API
+                                const url = `${TRANSLATE_API_URL}?q=${encodeURIComponent(lyricText)}&langpair=en|zh-CN`;
+                                const response = await fetch(url);
                                 if (response.ok) {
                                     const data = await response.json();
-                                    const translated = data.translatedText || null;
-                                    if (translated) {
+                                    // MyMemory 返回格式：{ responseData: { translatedText: "..." } }
+                                    const translated = data.responseData?.translatedText || null;
+                                    if (translated && translated !== lyricText) {
                                         displayParts.push(`\n--- 翻译 ---\n${translated}`);
                                     } else {
                                         displayParts.push(`\n（翻译失败）`);
@@ -791,7 +784,7 @@
         exportCsvBtn.addEventListener('click', exportCsv);
         copyAllBtn.addEventListener('click', copyAllLyrics);
 
-        console.log('🎵 音像采购工作台 v1.1 已加载（使用 LibreTranslate）');
+        console.log('🎵 音像采购工作台 v1.2 已加载（使用 MyMemory 翻译）');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_API_URL);
     </script>
