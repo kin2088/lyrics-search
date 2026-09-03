@@ -251,12 +251,6 @@
             margin-top: 8px;
             padding-top: 8px;
         }
-        .lyric-box .deepl-trans {
-            color: #a78bfa;
-            border-top: 1px dashed #4c1d95;
-            margin-top: 8px;
-            padding-top: 8px;
-        }
         .toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -324,14 +318,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.0</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.1</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 集成 DeepL 自动翻译（DeepLX 代理）
+            ✅ 网易云音乐歌词搜索 · 集成 LibreTranslate 免费翻译
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 官方译文优先 · 无官方译文时自动 DeepL 翻译（无需 API 密钥）
+                💡 官方译文优先 · 无官方译文时自动翻译（免费，无需密钥）
             </span>
         </div>
 
@@ -396,7 +390,7 @@
         </div>
 
         <div class="footer">
-            数据来源：网易云音乐 · 翻译：DeepL（DeepLX代理） · 仅供内部采购使用
+            数据来源：网易云音乐 · 翻译：LibreTranslate · 仅供内部采购使用
         </div>
     </div>
 
@@ -406,8 +400,8 @@
         // ================================================================
         const API_BASE = 'https://my-music-api.vercel.app/';
 
-        // ★★★ DeepLX 代理地址（免费，无需API密钥） ★★★
-        const DEEPLX_API_URL = 'https://deeplx.vercel.app/translate';
+        // ★★★ LibreTranslate 公共实例（免费，无需密钥，支持跨域） ★★★
+        const TRANSLATE_API_URL = 'https://libretranslate.de/translate';
 
         document.getElementById('apiDisplay').textContent = API_BASE;
 
@@ -446,9 +440,6 @@
             toast.className = 'toast';
         }
 
-        /**
-         * 清洗歌词：保留原文和译文，去除时间戳
-         */
         function cleanLyrics(raw) {
             if (!raw || raw === '暂无歌词') return '暂无歌词';
             let cleaned = raw
@@ -459,10 +450,6 @@
             return cleaned.join('\n');
         }
 
-        /**
-         * 检测文本是否为中文
-         * 中文字符 Unicode 范围：\u4e00-\u9fff
-         */
         function isChinese(text) {
             if (!text || text.length === 0) return false;
             const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
@@ -472,19 +459,13 @@
             return chineseChars.length / meaningful.length >= 0.3;
         }
 
-        /**
-         * 格式化歌词：原文 + 译文（如果有）
-         * 返回 { lyric: 原文, translation: 译文, hasOfficialTranslation: true/false }
-         */
         function formatLyrics(lrcData, tlyricData) {
             const result = { lyric: '', translation: '', hasOfficialTranslation: false };
-
             if (lrcData && lrcData.lyric) {
                 result.lyric = cleanLyrics(lrcData.lyric);
             } else {
                 result.lyric = '暂无歌词';
             }
-
             if (tlyricData && tlyricData.lyric) {
                 const trans = cleanLyrics(tlyricData.lyric);
                 if (trans && trans !== '暂无歌词' && trans !== '（纯音乐或无歌词）') {
@@ -492,7 +473,6 @@
                     result.hasOfficialTranslation = true;
                 }
             }
-
             return result;
         }
 
@@ -530,7 +510,6 @@
             const data = await resp.json();
             console.log('📝 歌词返回:', data);
             if (data.code !== 200) throw new Error(data.msg || '获取歌词失败');
-
             return {
                 lrc: data.lrc || null,
                 tlyric: data.tlyric || null
@@ -544,7 +523,6 @@
         async function doSearch() {
             const albumKeyword = albumInput.value.trim();
             const artistKeyword = artistInput.value.trim();
-
             if (!albumKeyword) {
                 showToast('请输入专辑名称', 'error');
                 return;
@@ -553,7 +531,6 @@
             hideToast();
             searchBtn.disabled = true;
             searchBtn.textContent = '⏳ 搜索中...';
-
             albumSection.style.display = 'none';
             songSection.style.display = 'none';
             currentAlbums = [];
@@ -562,7 +539,6 @@
 
             try {
                 const albums = await searchAlbums(albumKeyword);
-
                 if (!albums || albums.length === 0) {
                     showToast('未找到相关专辑，请尝试更换关键词', 'error');
                     searchBtn.disabled = false;
@@ -590,7 +566,6 @@
 
                 renderAlbumList(filtered);
                 albumSection.style.display = 'block';
-
             } catch (err) {
                 console.error(err);
                 showToast('搜索失败：' + err.message, 'error');
@@ -603,14 +578,12 @@
         function renderAlbumList(albums) {
             albumList.innerHTML = '';
             albumCount.textContent = `${albums.length} 个结果`;
-
             albums.forEach((alb, index) => {
                 const div = document.createElement('div');
                 div.className = 'card-item';
                 const artistName = alb.artist?.name || alb.artists?.map(a => a.name).join('/') || '未知歌手';
                 const name = alb.name || '未命名专辑';
                 const year = alb.publishTime ? new Date(alb.publishTime).getFullYear() : '';
-
                 div.innerHTML = `
                     <span style="font-weight:500; min-width:28px;">${index + 1}</span>
                     <span style="font-weight:500;">${name}</span>
@@ -619,11 +592,9 @@
                     <span class="tag netease">网易云</span>
                     <span class="source">${alb.id}</span>
                 `;
-
                 div.addEventListener('click', () => {
                     selectAlbum(alb.id);
                 });
-
                 albumList.appendChild(div);
             });
         }
@@ -637,7 +608,6 @@
                     break;
                 }
             }
-
             selectedAlbumId = albumId;
             showToast('加载专辑歌曲...', 'info');
 
@@ -645,15 +615,11 @@
                 const songs = await getAlbumDetail(albumId);
                 currentSongs = songs;
                 currentLyrics = {};
-
                 renderSongList(songs);
                 songSection.style.display = 'block';
-
                 lyricDisplay.innerHTML = `<span class="empty">← 点击歌曲查看歌词</span>`;
                 currentSongName.textContent = '';
-
                 showToast(`加载成功，共 ${songs.length} 首歌曲`, 'success');
-
             } catch (err) {
                 console.error(err);
                 showToast('加载歌曲失败：' + err.message, 'error');
@@ -663,42 +629,33 @@
         function renderSongList(songs) {
             songTableBody.innerHTML = '';
             songCount.textContent = `${songs.length} 首`;
-
             songs.forEach((song, index) => {
                 const tr = document.createElement('tr');
                 tr.className = 'clickable-row';
                 const songName = song.name || '未知歌曲';
                 const songId = song.id;
                 const playUrl = `https://music.163.com/song?id=${songId}`;
-
                 tr.innerHTML = `
                     <td>${index + 1}</td>
                     <td><strong>${songName}</strong></td>
                     <td><a href="${playUrl}" target="_blank" class="link-btn">🔗 播放</a></td>
                 `;
-
                 tr.addEventListener('click', () => {
                     loadLyricsWithTranslation(songId, songName, tr);
                 });
-
                 songTableBody.appendChild(tr);
             });
         }
 
         /**
-         * ★★★ 核心函数：加载歌词 + 智能翻译（使用 DeepLX，无需 API 密钥） ★★★
-         * 规则：有官方译文 → 展示官方译文
-         *       无官方译文 且 非中文 → DeepLX 翻译
-         *       无官方译文 且 是中文 → 不翻译
+         * ★★★ 核心函数：加载歌词 + 智能翻译（使用 LibreTranslate） ★★★
          */
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
             const allRows = songTableBody.querySelectorAll('.clickable-row');
             allRows.forEach(r => r.classList.remove('active'));
             if (rowElement) rowElement.classList.add('active');
-
             currentSongName.textContent = `🎵 ${songName}`;
 
-            // 检查缓存
             if (currentLyrics[songId]) {
                 lyricDisplay.innerHTML = currentLyrics[songId];
                 return;
@@ -706,76 +663,59 @@
 
             try {
                 lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ 加载歌词...</span>';
-
                 const { lrc, tlyric } = await getLyricsWithTranslation(songId);
                 const formatted = formatLyrics(lrc, tlyric);
 
                 let displayParts = [];
-
-                // 原文
                 if (formatted.lyric && formatted.lyric !== '暂无歌词') {
                     displayParts.push(formatted.lyric);
                 } else {
                     displayParts.push('（暂无歌词）');
                 }
 
-                // 有官方译文 → 展示官方译文
                 if (formatted.hasOfficialTranslation && formatted.translation) {
                     displayParts.push(`\n--- 官方译文 ---\n${formatted.translation}`);
                 } else {
-                    // 没有官方译文 → 判断是否需要翻译
                     const lyricText = formatted.lyric;
                     if (lyricText && lyricText !== '暂无歌词' && lyricText !== '（纯音乐或无歌词）') {
-                        // 非中文 → 调用 DeepLX 翻译
                         if (!isChinese(lyricText)) {
-                            lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ DeepL 翻译中...</span>';
+                            lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ 翻译中...</span>';
                             try {
-                                const response = await fetch(DEEPLX_API_URL, {
+                                const response = await fetch(TRANSLATE_API_URL, {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json'
                                     },
                                     body: JSON.stringify({
-                                        text: lyricText,
-                                        source_lang: 'EN',
-                                        target_lang: 'ZH'
+                                        q: lyricText,
+                                        source: 'en',
+                                        target: 'zh'
                                     })
                                 });
 
                                 if (response.ok) {
                                     const data = await response.json();
-                                    // DeepLX 返回格式：{ data: "翻译结果" } 或 { translations: [{ text: "翻译结果" }] }
-                                    let translated = null;
-                                    if (data.data) {
-                                        translated = data.data;
-                                    } else if (data.translations && data.translations.length > 0) {
-                                        translated = data.translations[0].text;
-                                    } else if (data.text) {
-                                        translated = data.text;
-                                    }
-
+                                    const translated = data.translatedText || null;
                                     if (translated) {
-                                        displayParts.push(`\n--- DeepL 翻译 ---\n${translated}`);
+                                        displayParts.push(`\n--- 翻译 ---\n${translated}`);
                                     } else {
-                                        displayParts.push(`\n（DeepL 翻译失败）`);
+                                        displayParts.push(`\n（翻译失败）`);
                                     }
                                 } else {
-                                    console.error('DeepLX 请求失败:', response.status);
-                                    displayParts.push(`\n（DeepL 翻译失败）`);
+                                    console.error('翻译请求失败:', response.status);
+                                    displayParts.push(`\n（翻译失败）`);
                                 }
                             } catch (err) {
-                                console.error('DeepLX 翻译失败:', err);
-                                displayParts.push(`\n（DeepL 翻译失败）`);
+                                console.error('翻译失败:', err);
+                                displayParts.push(`\n（翻译失败）`);
                             }
                         }
-                        // 中文 → 不翻译
                     }
                 }
 
                 const finalText = displayParts.join('\n');
                 currentLyrics[songId] = finalText;
                 lyricDisplay.textContent = finalText;
-
             } catch (err) {
                 console.error(err);
                 lyricDisplay.innerHTML = `<span style="color:#f87171;">加载歌词失败：${err.message}</span>`;
@@ -791,11 +731,7 @@
                 showToast('没有歌曲可导出，请先选择专辑', 'error');
                 return;
             }
-
-            let rows = [
-                ['序号', '歌名', '播放链接', '歌词']
-            ];
-
+            let rows = [['序号', '歌名', '播放链接', '歌词']];
             currentSongs.forEach((song, index) => {
                 const name = song.name || '未知歌曲';
                 const id = song.id;
@@ -803,7 +739,6 @@
                 const lyric = currentLyrics[id] || '（点击加载歌词）';
                 rows.push([index + 1, name, url, lyric]);
             });
-
             const csvContent = rows.map(row =>
                 row.map(cell => {
                     if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
@@ -812,7 +747,6 @@
                     return cell;
                 }).join(',')
             ).join('\n');
-
             const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const albumName = currentAlbums.find(a => a.id === selectedAlbumId)?.name || '专辑';
@@ -820,7 +754,6 @@
             link.href = URL.createObjectURL(blob);
             link.click();
             URL.revokeObjectURL(link.href);
-
             showToast(`✅ 导出成功！共 ${currentSongs.length} 首歌曲`, 'success');
         }
 
@@ -829,19 +762,16 @@
                 showToast('没有歌词可复制', 'error');
                 return;
             }
-
             let text = '';
             currentSongs.forEach((song, index) => {
                 const name = song.name || '未知歌曲';
                 const lyric = currentLyrics[song.id] || '（未加载）';
                 text += `【${index + 1}】${name}\n${lyric}\n\n`;
             });
-
             if (!text) {
                 showToast('请先点击歌曲加载歌词', 'error');
                 return;
             }
-
             navigator.clipboard.writeText(text).then(() => {
                 showToast('✅ 已复制全部歌词到剪贴板', 'success');
             }).catch(() => {
@@ -855,19 +785,15 @@
             });
         }
 
-        // ================================================================
-        //  事件绑定
-        // ================================================================
-
         searchBtn.addEventListener('click', doSearch);
         albumInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
         artistInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
         exportCsvBtn.addEventListener('click', exportCsv);
         copyAllBtn.addEventListener('click', copyAllLyrics);
 
-        console.log('🎵 音像采购工作台 v1.0 已加载（使用 DeepLX 翻译）');
+        console.log('🎵 音像采购工作台 v1.1 已加载（使用 LibreTranslate）');
         console.log('📡 API地址:', API_BASE);
-        console.log('🌐 DeepLX 代理:', DEEPLX_API_URL);
+        console.log('🌐 翻译服务:', TRANSLATE_API_URL);
     </script>
 </body>
 </html>
