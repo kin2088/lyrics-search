@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>音像采购工作台 - 歌词搜索</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            padding: 30px 20px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 30px 35px 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.06);
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 28px;
+            border-left: 4px solid #3b82f6;
+            padding-left: 14px;
+            background: #f8fafc;
+            border-radius: 0 8px 8px 0;
+            line-height: 1.6;
+        }
+        .search-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 30px;
+            background: #f8fafc;
+            padding: 20px 24px;
+            border-radius: 16px;
+            border: 1px solid #e9edf2;
+        }
+        .search-bar label {
+            font-weight: 500;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1 1 180px;
+        }
+        .search-bar input {
+            padding: 10px 14px;
+            border: 1px solid #d1d9e6;
+            border-radius: 10px;
+            font-size: 15px;
+            background: white;
+            transition: 0.2s;
+        }
+        .search-bar input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .btn {
+            padding: 10px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #d1d9e6;
+            color: #334155;
+        }
+        .btn-outline:hover {
+            background: #f1f5f9;
+        }
+        .search-bar .btn {
+            align-self: flex-end;
+            height: 44px;
+        }
+        .section {
+            margin-top: 28px;
+        }
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title .badge {
+            font-size: 12px;
+            background: #e2e8f0;
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-weight: 400;
+            color: #475569;
+        }
+        .card {
+            background: #fafbfc;
+            border: 1px solid #edf2f7;
+            border-radius: 14px;
+            padding: 4px 0;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .card-item {
+            padding: 10px 18px;
+            border-bottom: 1px solid #edf2f7;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: 0.15s;
+            font-size: 14px;
+        }
+        .card-item:last-child {
+            border-bottom: none;
+        }
+        .card-item:hover {
+            background: #f1f5f9;
+        }
+        .card-item.selected {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+        }
+        .card-item .tag {
+            font-size: 11px;
+            background: #e2e8f0;
+            padding: 2px 10px;
+            border-radius: 20px;
+            color: #475569;
+            white-space: nowrap;
+        }
+        .card-item .tag.netease {
+            background: #fce4ec;
+            color: #c62828;
+        }
+        .card-item .source {
+            margin-left: auto;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid #edf2f7;
+            border-radius: 14px;
+            background: #fafbfc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            background: #f1f5f9;
+            font-weight: 600;
+            color: #334155;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        td {
+            padding: 10px 16px;
+            border-bottom: 1px solid #edf2f7;
+            vertical-align: middle;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .link-btn {
+            color: #3b82f6;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .link-btn:hover {
+            text-decoration: underline;
+        }
+        .clickable-row {
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .clickable-row:hover {
+            background: #f1f5f9;
+        }
+        .clickable-row.active {
+            background: #dbeafe;
+        }
+        .lyric-box {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 14px;
+            padding: 20px 24px;
+            font-family: "SF Mono", "Menlo", "Consolas", monospace;
+            font-size: 14px;
+            line-height: 1.9;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-top: 6px;
+        }
+        .lyric-box .empty {
+            color: #64748b;
+            font-family: -apple-system, sans-serif;
+        }
+        .lyric-box .translation {
+            color: #94a3b8;
+            font-style: italic;
+            border-top: 1px dashed #334155;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+        .lyric-box .deepl-trans {
+            color: #a78bfa;
+            border-top: 1px dashed #4c1d95;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+        .lyric-box .deepl-label {
+            color: #8b5cf6;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+            align-items: center;
+        }
+        .toast {
+            margin-top: 16px;
+            padding: 12px 18px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+        }
+        .toast.show {
+            display: block;
+        }
+        .toast-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .toast-error {
+            background: #fecaca;
+            color: #991b1b;
+        }
+        .toast-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .footer {
+            margin-top: 40px;
+            border-top: 1px solid #edf2f7;
+            padding-top: 20px;
+            font-size: 13px;
+            color: #94a3b8;
+            text-align: center;
+        }
+        @media (max-width: 700px) {
+            .container {
+                padding: 18px 16px;
+            }
+            .search-bar {
+                padding: 16px;
+            }
+            .search-bar label {
+                flex: 1 1 100%;
+            }
+            .search-bar .btn {
+                width: 100%;
+                justify-content: center;
+            }
+            .card-item {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .card-item .source {
+                margin-left: 0;
+            }
+            .toolbar .btn {
+                flex: 1 1 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.0</span></h1>
+        <div class="subtitle">
+            ✅ 网易云音乐歌词搜索 · 集成 DeepL 自动翻译
+            <br />
+            <span style="font-size:13px; color:#94a3b8;">
+                💡 非中文歌词自动翻译（无官方译文时） · 官方译文优先展示
+            </span>
+        </div>
+
+        <div class="search-bar">
+            <label>
+                专辑名称 <span style="font-weight:400; color:#94a3b8; font-size:12px;">（必填）</span>
+                <input type="text" id="albumInput" placeholder="例如：最伟大的作品" />
+            </label>
+            <label>
+                歌手名称 <span style="font-weight:400; color:#94a3b8; font-size:12px;">（选填，用于过滤）</span>
+                <input type="text" id="artistInput" placeholder="例如：周杰伦" />
+            </label>
+            <button class="btn btn-primary" id="searchBtn">🔍 搜索</button>
+        </div>
+
+        <div id="toast" class="toast"></div>
+
+        <div class="section" id="albumSection" style="display:none;">
+            <div class="section-title">
+                📀 请选择专辑
+                <span class="badge" id="albumCount">0 个结果</span>
+            </div>
+            <div class="card" id="albumList"></div>
+        </div>
+
+        <div class="section" id="songSection" style="display:none;">
+            <div class="section-title">
+                🎶 歌曲列表
+                <span class="badge" id="songCount">0 首</span>
+                <span style="margin-left:auto; font-size:13px; font-weight:400; color:#94a3b8;">
+                    点击歌曲查看歌词
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:44px;">#</th>
+                            <th>歌名</th>
+                            <th style="width:200px;">播放链接</th>
+                        </tr>
+                    </thead>
+                    <tbody id="songTableBody"></tbody>
+                </table>
+            </div>
+            <div style="margin-top:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <span style="font-weight:600; font-size:15px;">📝 歌词</span>
+                    <span id="currentSongName" style="font-size:14px; color:#64748b;"></span>
+                </div>
+                <div class="lyric-box" id="lyricDisplay">
+                    <span class="empty">← 点击歌曲查看歌词</span>
+                </div>
+            </div>
+            <div class="toolbar">
+                <button class="btn btn-success" id="exportCsvBtn">📥 导出CSV（Excel可编辑）</button>
+                <button class="btn btn-outline" id="copyAllBtn">📋 复制全部歌词</button>
+                <span style="font-size:13px; color:#94a3b8; margin-left:auto;">
+                    CSV包含：歌名、播放链接、歌词
+                </span>
+            </div>
+        </div>
+
+        <div class="footer">
+            数据来源：网易云音乐 · 翻译：DeepL · 仅供内部采购使用
+        </div>
+    </div>
+
+    <script>
+        // ================================================================
+        // ★★★ 配置区 ★★★
+        // ================================================================
+
+        // 你的网易云 API 地址
+        const API_BASE = 'https://my-music-api.vercel.app/';
+
+        // ★★★ DeepL API 密钥（已填入你的密钥） ★★★
+        const DEEPL_API_KEY = '51a8015d-6fea-45e6-8bf0-7336ba4bf26a:fx';
+
+        // DeepL API 地址（免费版用 api-free）
+        const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate';
+
+        // 是否启用 DeepL 翻译
+        const DEEPL_ENABLED = DEEPL_API_KEY && DEEPL_API_KEY.length > 10;
+
+        // ================================================================
+        //  状态变量
+        // ================================================================
+        let currentAlbums = [];
+        let currentSongs = [];
+        let currentLyrics = {};
+        let selectedAlbumId = null;
+
+        const albumInput = document.getElementById('albumInput');
+        const artistInput = document.getElementById('artistInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const toast = document.getElementById('toast');
+        const albumSection = document.getElementById('albumSection');
+        const albumList = document.getElementById('albumList');
+        const albumCount = document.getElementById('albumCount');
+        const songSection = document.getElementById('songSection');
+        const songTableBody = document.getElementById('songTableBody');
+        const songCount = document.getElementById('songCount');
+        const lyricDisplay = document.getElementById('lyricDisplay');
+        const currentSongName = document.getElementById('currentSongName');
+        const exportCsvBtn = document.getElementById('exportCsvBtn');
+        const copyAllBtn = document.getElementById('copyAllBtn');
+
+        // ================================================================
+        //  工具函数
+        // ================================================================
+        function showToast(msg, type = 'info') {
+            toast.className = `toast show toast-${type}`;
+            toast.textContent = msg;
+        }
+
+        function hideToast() {
+            toast.className = 'toast';
+        }
+
+        /**
+         * 清洗歌词：去除时间戳
+         */
+        function cleanLyrics(raw) {
+            if (!raw || raw === '暂无歌词') return '暂无歌词';
+            let cleaned = raw
+                .split('\n')
+                .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
+                .filter(line => line.length > 0);
+            if (cleaned.length === 0) return '（纯音乐或无歌词）';
+            return cleaned.join('\n');
+        }
+
+        /**
+         * 检测文本是否为中文（主要）
+         * 中文字符 Unicode 范围：\u4e00-\u9fff
+         */
+        function isChinese(text) {
+            if (!text || text.length === 0) return false;
+            // 只统计有意义的字符（排除空格、换行、标点）
+            const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
+            if (meaningful.length === 0) return false;
+            const chineseChars = meaningful.match(/[\u4e00-\u9fff]/g);
+            if (!chineseChars) return false;
+            // 如果中文字符占比 >= 30%，认为是中文
+            return chineseChars.length / meaningful.length >= 0.3;
+        }
+
+        /**
+         * 检测文本是否为英文（主要由拉丁字母组成）
+         */
+        function isEnglish(text) {
+            if (!text || text.length === 0) return false;
+            const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
+            if (meaningful.length === 0) return false;
+            const latinChars = meaningful.match(/[a-zA-Z]/g);
+            if (!latinChars) return false;
+            return latinChars.length / meaningful.length > 0.7;
+        }
+
+        /**
+         * 判断歌词是否需要翻译
+         * 规则：非中文 且 非英文（或者虽然是英文但用户可能需要翻译）
+         * 我们简单处理：只要不是中文就翻译（包括英文、日文、韩文等）
+         */
+        function needsTranslation(text) {
+            if (!text || text.length === 0) return false;
+            // 如果已经是中文，不需要翻译
+            if (isChinese(text)) return false;
+            // 非中文 → 需要翻译
+            return true;
+        }
+
+        /**
+         * 调用 DeepL 翻译 API
+         */
+        async function translateWithDeepL(text) {
+            if (!DEEPL_ENABLED) {
+                console.warn('DeepL 未配置，跳过翻译');
+                return null;
+            }
+            if (!text || text.length === 0) return null;
+            // 如果已经是中文，不翻译
+            if (isChinese(text)) return null;
+
+            try {
+                const response = await fetch(DEEPL_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        text: [text],
+                        target_lang: 'ZH'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('DeepL API 错误:', errorText);
+                    throw new Error(`DeepL API 错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('DeepL 翻译结果:', data);
+
+                if (data.translations && data.translations.length > 0) {
+                    return data.translations[0].text;
+                }
+                return null;
+            } catch (err) {
+                console.error('DeepL 翻译失败:', err);
+                return null;
+            }
+        }
+
+        /**
+         * 格式化歌词：原文 + 译文（如果有）
+         */
+        function formatLyrics(lrcData, tlyricData) {
+            const result = { lyric: '', translation: '', hasOfficialTranslation: false };
+
+            // 处理原文
+            if (lrcData && lrcData.lyric) {
+                result.lyric = cleanLyrics(lrcData.lyric);
+            } else {
+                result.lyric = '暂无歌词';
+            }
+
+            // 处理官方译文（如果有）
+            if (tlyricData && tlyricData.lyric) {
+                const trans = cleanLyrics(tlyricData.lyric);
+                if (trans && trans !== '暂无歌词' && trans !== '（纯音乐或无歌词）') {
+                    result.translation = trans;
+                    result.hasOfficialTranslation = true;
+                }
+            }
+
+            return result;
+        }
+
+        // ================================================================
+        //  API 调用
+        // ================================================================
+
+        async function searchAlbums(keyword) {
+            const url = `${API_BASE}search?keywords=${encodeURIComponent(keyword)}&type=10&limit=30`;
+            console.log('🔍 搜索请求:', url);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            console.log('📦 搜索结果:', data);
+            if (data.code !== 200) throw new Error(data.msg || '搜索失败');
+            return data.result?.albums || [];
+        }
+
+        async function getAlbumDetail(albumId) {
+            const url = `${API_BASE}album?id=${albumId}`;
+            console.log('📀 专辑详情请求:', url);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            console.log('📀 专辑详情:', data);
+            if (data.code !== 200) throw new Error(data.msg || '获取专辑详情失败');
+            return data.songs || [];
+        }
+
+        async function getLyricsWithTranslation(songId) {
+            const url = `${API_BASE}lyric?id=${songId}`;
+            console.log('📝 歌词请求:', url);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            console.log('📝 歌词返回:', data);
+            if (data.code !== 200) throw new Error(data.msg || '获取歌词失败');
+
+            return {
+                lrc: data.lrc || null,
+                tlyric: data.tlyric || null
+            };
+        }
+
+        // ================================================================
+        //  核心逻辑
+        // ================================================================
+
+        async function doSearch() {
+            const albumKeyword = albumInput.value.trim();
+            const artistKeyword = artistInput.value.trim();
+
+            if (!albumKeyword) {
+                showToast('请输入专辑名称', 'error');
+                return;
+            }
+
+            hideToast();
+            searchBtn.disabled = true;
+            searchBtn.textContent = '⏳ 搜索中...';
+
+            albumSection.style.display = 'none';
+            songSection.style.display = 'none';
+            currentAlbums = [];
+            currentSongs = [];
+            currentLyrics = {};
+
+            try {
+                const albums = await searchAlbums(albumKeyword);
+
+                if (!albums || albums.length === 0) {
+                    showToast('未找到相关专辑，请尝试更换关键词', 'error');
+                    searchBtn.disabled = false;
+                    searchBtn.textContent = '🔍 搜索';
+                    return;
+                }
+
+                let filtered = albums;
+                if (artistKeyword) {
+                    const lowerArtist = artistKeyword.toLowerCase();
+                    filtered = albums.filter(alb => {
+                        const names = alb.artists?.map(a => a.name.toLowerCase()) || [];
+                        const artistName = (alb.artist?.name || '').toLowerCase();
+                        return names.some(n => n.includes(lowerArtist)) || artistName.includes(lowerArtist);
+                    });
+                    if (filtered.length === 0) {
+                        filtered = albums;
+                        showToast(`未找到歌手"${artistKeyword}"相关结果，显示全部 ${albums.length} 个专辑`, 'info');
+                    } else {
+                        showToast(`找到 ${filtered.length} 个匹配"${artistKeyword}"的专辑`, 'success');
+                    }
+                } else {
+                    showToast(`找到 ${albums.length} 个相关专辑，请点击选择`, 'success');
+                }
+
+                renderAlbumList(filtered);
+                albumSection.style.display = 'block';
+
+            } catch (err) {
+                console.error(err);
+                showToast('搜索失败：' + err.message, 'error');
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 搜索';
+            }
+        }
+
+        function renderAlbumList(albums) {
+            albumList.innerHTML = '';
+            albumCount.textContent = `${albums.length} 个结果`;
+
+            albums.forEach((alb, index) => {
+                const div = document.createElement('div');
+                div.className = 'card-item';
+                const artistName = alb.artist?.name || alb.artists?.map(a => a.name).join('/') || '未知歌手';
+                const name = alb.name || '未命名专辑';
+                const year = alb.publishTime ? new Date(alb.publishTime).getFullYear() : '';
+
+                div.innerHTML = `
+                    <span style="font-weight:500; min-width:28px;">${index + 1}</span>
+                    <span style="font-weight:500;">${name}</span>
+                    <span style="color:#64748b;">- ${artistName}</span>
+                    ${year ? `<span style="color:#94a3b8; font-size:13px;">(${year})</span>` : ''}
+                    <span class="tag netease">网易云</span>
+                    <span class="source">${alb.id}</span>
+                `;
+
+                div.addEventListener('click', () => {
+                    selectAlbum(alb.id);
+                });
+
+                albumList.appendChild(div);
+            });
+        }
+
+        async function selectAlbum(albumId) {
+            const items = albumList.querySelectorAll('.card-item');
+            items.forEach(el => el.classList.remove('selected'));
+            for (const el of items) {
+                if (el.textContent.includes(albumId)) {
+                    el.classList.add('selected');
+                    break;
+                }
+            }
+
+            selectedAlbumId = albumId;
+            showToast('加载专辑歌曲...', 'info');
+
+            try {
+                const songs = await getAlbumDetail(albumId);
+                currentSongs = songs;
+                currentLyrics = {};
+
+                renderSongList(songs);
+                songSection.style.display = 'block';
+
+                lyricDisplay.innerHTML = `<span class="empty">← 点击歌曲查看歌词</span>`;
+                currentSongName.textContent = '';
+
+                showToast(`加载成功，共 ${songs.length} 首歌曲`, 'success');
+
+            } catch (err) {
+                console.error(err);
+                showToast('加载歌曲失败：' + err.message, 'error');
+            }
+        }
+
+        function renderSongList(songs) {
+            songTableBody.innerHTML = '';
+            songCount.textContent = `${songs.length} 首`;
+
+            songs.forEach((song, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row';
+                const songName = song.name || '未知歌曲';
+                const songId = song.id;
+                const playUrl = `https://music.163.com/song?id=${songId}`;
+
+                tr.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><strong>${songName}</strong></td>
+                    <td><a href="${playUrl}" target="_blank" class="link-btn">🔗 播放</a></td>
+                `;
+
+                tr.addEventListener('click', () => {
+                    loadLyricsWithTranslation(songId, songName, tr);
+                });
+
+                songTableBody.appendChild(tr);
+            });
+        }
+
+        /**
+         * ★★★ 核心函数：加载歌词 + 智能翻译 ★★★
+         */
+        async function loadLyricsWithTranslation(songId, songName, rowElement) {
+            const allRows = songTableBody.querySelectorAll('.clickable-row');
+            allRows.forEach(r => r.classList.remove('active'));
+            if (rowElement) rowElement.classList.add('active');
+
+            currentSongName.textContent = `🎵 ${songName}`;
+
+            // 检查缓存
+            if (currentLyrics[songId]) {
+                lyricDisplay.innerHTML = currentLyrics[songId];
+                return;
+            }
+
+            try {
+                lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ 加载歌词...</span>';
+
+                // 1. 获取歌词（原文 + 官方译文）
+                const { lrc, tlyric } = await getLyricsWithTranslation(songId);
+                const formatted = formatLyrics(lrc, tlyric);
+
+                // 构建显示内容
+                let displayParts = [];
+
+                // 原文
+                if (formatted.lyric && formatted.lyric !== '暂无歌词') {
+                    displayParts.push(formatted.lyric);
+                } else {
+                    displayParts.push('（暂无歌词）');
+                }
+
+                // 2. 如果有官方译文，直接展示
+                if (formatted.hasOfficialTranslation && formatted.translation) {
+                    displayParts.push(`\n--- 官方译文 ---\n${formatted.translation}`);
+                } else {
+                    // 3. 没有官方译文 → 判断是否需要 DeepL 翻译
+                    const lyricText = formatted.lyric;
+                    if (lyricText && lyricText !== '暂无歌词' && lyricText !== '（纯音乐或无歌词）') {
+                        // 检测语言：如果是非中文，调用 DeepL
+                        if (needsTranslation(lyricText)) {
+                            if (DEEPL_ENABLED) {
+                                lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ DeepL 翻译中...</span>';
+                                const translated = await translateWithDeepL(lyricText);
+                                if (translated) {
+                                    displayParts.push(`\n--- DeepL 翻译 ---\n${translated}`);
+                                } else {
+                                    displayParts.push(`\n（DeepL 翻译失败，请检查网络或密钥）`);
+                                }
+                            } else {
+                                displayParts.push(`\n（DeepL 未配置，请设置 API 密钥）`);
+                            }
+                        }
+                        // 如果是中文，不翻译（保持只有原文）
+                    }
+                }
+
+                // 合并所有内容
+                const finalText = displayParts.join('\n');
+                currentLyrics[songId] = finalText;
+                lyricDisplay.textContent = finalText;
+
+            } catch (err) {
+                console.error(err);
+                lyricDisplay.innerHTML = `<span style="color:#f87171;">加载歌词失败：${err.message}</span>`;
+            }
+        }
+
+        // ================================================================
+        //  导出功能
+        // ================================================================
+
+        function exportCsv() {
+            if (currentSongs.length === 0) {
+                showToast('没有歌曲可导出，请先选择专辑', 'error');
+                return;
+            }
+
+            let rows = [
+                ['序号', '歌名', '播放链接', '歌词']
+            ];
+
+            currentSongs.forEach((song, index) => {
+                const name = song.name || '未知歌曲';
+                const id = song.id;
+                const url = `https://music.163.com/song?id=${id}`;
+                const lyric = currentLyrics[id] || '（点击加载歌词）';
+                rows.push([index + 1, name, url, lyric]);
+            });
+
+            const csvContent = rows.map(row =>
+                row.map(cell => {
+                    if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
+                        return `"${cell.replace(/"/g, '""')}"`;
+                    }
+                    return cell;
+                }).join(',')
+            ).join('\n');
+
+            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const albumName = currentAlbums.find(a => a.id === selectedAlbumId)?.name || '专辑';
+            link.download = `${albumName}_歌曲列表.csv`;
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            URL.revokeObjectURL(link.href);
+
+            showToast(`✅ 导出成功！共 ${currentSongs.length} 首歌曲`, 'success');
+        }
+
+        function copyAllLyrics() {
+            if (currentSongs.length === 0) {
+                showToast('没有歌词可复制', 'error');
+                return;
+            }
+
+            let text = '';
+            currentSongs.forEach((song, index) => {
+                const name = song.name || '未知歌曲';
+                const lyric = currentLyrics[song.id] || '（未加载）';
+                text += `【${index + 1}】${name}\n${lyric}\n\n`;
+            });
+
+            if (!text) {
+                showToast('请先点击歌曲加载歌词', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('✅ 已复制全部歌词到剪贴板', 'success');
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('✅ 已复制全部歌词到剪贴板', 'success');
+            });
+        }
+
+        // ================================================================
+        //  事件绑定
+        // ================================================================
+
+        searchBtn.addEventListener('click', doSearch);
+        albumInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+        artistInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+        exportCsvBtn.addEventListener('click', exportCsv);
+        copyAllBtn.addEventListener('click', copyAllLyrics);
+
+        console.log('🎵 音像采购工作台 v1.0 已加载（含 DeepL 翻译）');
+        console.log('📡 API地址:', API_BASE);
+        console.log('🔑 DeepL 已' + (DEEPL_ENABLED ? '✅ 启用' : '❌ 禁用'));
+    </script>
+</body>
+</html>
