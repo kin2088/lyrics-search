@@ -324,14 +324,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v0.7</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v1.0</span></h1>
         <div class="subtitle">
-            v0.6 · 网易云音乐歌词搜索 · 增强歌词完整性 + DeepL翻译
+            ✅ 网易云音乐歌词搜索 · 集成 DeepL 自动翻译（DeepLX 代理）
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 歌词会同时展示原文和官方译文（如有） · 非中文歌词自动DeepL翻译
+                💡 官方译文优先 · 无官方译文时自动 DeepL 翻译（无需 API 密钥）
             </span>
         </div>
 
@@ -396,7 +396,7 @@
         </div>
 
         <div class="footer">
-            数据来源：网易云音乐 · 翻译：DeepL · 仅供内部采购使用
+            数据来源：网易云音乐 · 翻译：DeepL（DeepLX代理） · 仅供内部采购使用
         </div>
     </div>
 
@@ -406,9 +406,8 @@
         // ================================================================
         const API_BASE = 'https://my-music-api.vercel.app/';
 
-        // ★★★ DeepL API 密钥（已填入你的密钥） ★★★
-        const DEEPL_API_KEY = '51a8015d-6fea-45e6-8bf0-7336ba4bf26a:fx';
-        const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate';
+        // ★★★ DeepLX 代理地址（免费，无需API密钥） ★★★
+        const DEEPLX_API_URL = 'https://dlx.plex.workers.dev/translate';
 
         document.getElementById('apiDisplay').textContent = API_BASE;
 
@@ -449,76 +448,28 @@
 
         /**
          * 清洗歌词：保留原文和译文，去除时间戳
-         * 但保留歌词的结构（空行、段落）
          */
         function cleanLyrics(raw) {
             if (!raw || raw === '暂无歌词') return '暂无歌词';
-
-            // 去除时间戳 [xx:xx.xx] 或 [xx:xx.xx.xx]
             let cleaned = raw
                 .split('\n')
                 .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
                 .filter(line => line.length > 0);
-
             if (cleaned.length === 0) return '（纯音乐或无歌词）';
             return cleaned.join('\n');
         }
 
         /**
-         * 检测文本是否为中文（主要）
+         * 检测文本是否为中文
          * 中文字符 Unicode 范围：\u4e00-\u9fff
          */
         function isChinese(text) {
             if (!text || text.length === 0) return false;
-            // 只统计有意义的字符（排除空格、换行、标点）
             const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
             if (meaningful.length === 0) return false;
             const chineseChars = meaningful.match(/[\u4e00-\u9fff]/g);
             if (!chineseChars) return false;
-            // 如果中文字符占比 >= 30%，认为是中文
             return chineseChars.length / meaningful.length >= 0.3;
-        }
-
-        /**
-         * 调用 DeepL 翻译 API
-         */
-        async function translateWithDeepL(text) {
-            if (!DEEPL_API_KEY || DEEPL_API_KEY.length < 10) {
-                console.warn('DeepL 未配置，跳过翻译');
-                return null;
-            }
-            if (!text || text.length === 0) return null;
-            // 如果已经是中文，不翻译
-            if (isChinese(text)) return null;
-
-            try {
-                const response = await fetch(DEEPL_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        text: [text],
-                        target_lang: 'ZH'
-                    })
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('DeepL API 错误:', errorText);
-                    return null;
-                }
-
-                const data = await response.json();
-                if (data.translations && data.translations.length > 0) {
-                    return data.translations[0].text;
-                }
-                return null;
-            } catch (err) {
-                console.error('DeepL 翻译失败:', err);
-                return null;
-            }
         }
 
         /**
@@ -528,14 +479,12 @@
         function formatLyrics(lrcData, tlyricData) {
             const result = { lyric: '', translation: '', hasOfficialTranslation: false };
 
-            // 处理原文
             if (lrcData && lrcData.lyric) {
                 result.lyric = cleanLyrics(lrcData.lyric);
             } else {
                 result.lyric = '暂无歌词';
             }
 
-            // 处理官方译文（如果有）
             if (tlyricData && tlyricData.lyric) {
                 const trans = cleanLyrics(tlyricData.lyric);
                 if (trans && trans !== '暂无歌词' && trans !== '（纯音乐或无歌词）') {
@@ -573,10 +522,6 @@
             return data.songs || [];
         }
 
-        /**
-         * 获取歌词：同时获取原文（lrc）和译文（tlyric）
-         * 返回 { lrc, tlyric }
-         */
         async function getLyricsWithTranslation(songId) {
             const url = `${API_BASE}lyric?id=${songId}`;
             console.log('📝 歌词请求:', url);
@@ -588,7 +533,7 @@
 
             return {
                 lrc: data.lrc || null,
-                tlyric: data.tlyric || null  // 网易云的翻译歌词字段
+                tlyric: data.tlyric || null
             };
         }
 
@@ -741,9 +686,9 @@
         }
 
         /**
-         * ★★★ 核心函数：加载歌词 + 智能翻译 ★★★
+         * ★★★ 核心函数：加载歌词 + 智能翻译（使用 DeepLX，无需 API 密钥） ★★★
          * 规则：有官方译文 → 展示官方译文
-         *       无官方译文 且 非中文 → DeepL翻译
+         *       无官方译文 且 非中文 → DeepLX 翻译
          *       无官方译文 且 是中文 → 不翻译
          */
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
@@ -762,11 +707,9 @@
             try {
                 lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ 加载歌词...</span>';
 
-                // 1. 获取歌词（原文 + 官方译文）
                 const { lrc, tlyric } = await getLyricsWithTranslation(songId);
                 const formatted = formatLyrics(lrc, tlyric);
 
-                // 构建显示内容
                 let displayParts = [];
 
                 // 原文
@@ -776,28 +719,59 @@
                     displayParts.push('（暂无歌词）');
                 }
 
-                // 2. 如果有官方译文，直接展示
+                // 有官方译文 → 展示官方译文
                 if (formatted.hasOfficialTranslation && formatted.translation) {
                     displayParts.push(`\n--- 官方译文 ---\n${formatted.translation}`);
                 } else {
-                    // 3. 没有官方译文 → 判断是否需要 DeepL 翻译
+                    // 没有官方译文 → 判断是否需要翻译
                     const lyricText = formatted.lyric;
                     if (lyricText && lyricText !== '暂无歌词' && lyricText !== '（纯音乐或无歌词）') {
-                        // 检测语言：如果是非中文，调用 DeepL
+                        // 非中文 → 调用 DeepLX 翻译
                         if (!isChinese(lyricText)) {
                             lyricDisplay.innerHTML = '<span style="color:#64748b;">⏳ DeepL 翻译中...</span>';
-                            const translated = await translateWithDeepL(lyricText);
-                            if (translated) {
-                                displayParts.push(`\n--- DeepL 翻译 ---\n${translated}`);
-                            } else {
+                            try {
+                                const response = await fetch(DEEPLX_API_URL, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        text: lyricText,
+                                        source_lang: 'EN',
+                                        target_lang: 'ZH'
+                                    })
+                                });
+
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    // DeepLX 返回格式：{ data: "翻译结果" } 或 { translations: [{ text: "翻译结果" }] }
+                                    let translated = null;
+                                    if (data.data) {
+                                        translated = data.data;
+                                    } else if (data.translations && data.translations.length > 0) {
+                                        translated = data.translations[0].text;
+                                    } else if (data.text) {
+                                        translated = data.text;
+                                    }
+
+                                    if (translated) {
+                                        displayParts.push(`\n--- DeepL 翻译 ---\n${translated}`);
+                                    } else {
+                                        displayParts.push(`\n（DeepL 翻译失败）`);
+                                    }
+                                } else {
+                                    console.error('DeepLX 请求失败:', response.status);
+                                    displayParts.push(`\n（DeepL 翻译失败）`);
+                                }
+                            } catch (err) {
+                                console.error('DeepLX 翻译失败:', err);
                                 displayParts.push(`\n（DeepL 翻译失败）`);
                             }
                         }
-                        // 如果是中文，不翻译（保持只有原文）
+                        // 中文 → 不翻译
                     }
                 }
 
-                // 合并所有内容
                 const finalText = displayParts.join('\n');
                 currentLyrics[songId] = finalText;
                 lyricDisplay.textContent = finalText;
@@ -891,9 +865,9 @@
         exportCsvBtn.addEventListener('click', exportCsv);
         copyAllBtn.addEventListener('click', copyAllLyrics);
 
-        console.log('🎵 音像采购工作台 v0.7 已加载（含 DeepL 翻译）');
+        console.log('🎵 音像采购工作台 v1.0 已加载（使用 DeepLX 翻译）');
         console.log('📡 API地址:', API_BASE);
-        console.log('🔑 DeepL 已' + (DEEPL_API_KEY && DEEPL_API_KEY.length > 10 ? '✅ 启用' : '❌ 禁用'));
+        console.log('🌐 DeepLX 代理:', DEEPLX_API_URL);
     </script>
 </body>
 </html>
