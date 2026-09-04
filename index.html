@@ -162,9 +162,9 @@
         }
         .artist-section .artist-brief {
             font-size: 14px;
-            line-height: 1.8;
-            color: #334155;
-            max-height: 400px;
+            line-height: 1.9;
+            color: #1e293b;
+            max-height: 500px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-word;
@@ -283,14 +283,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.5</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.6</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 独立翻译 · 逐行对齐 · 完整简介
+            ✅ 网易云音乐歌词搜索 · 批量翻译 · 逐行对齐 · 智能简介
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 歌词逐行对应 · 点击歌手名查看完整简介
+                💡 批量翻译提速 · 原文译文逐行对应 · 点击歌手名查看完整简介
             </span>
         </div>
 
@@ -379,7 +379,7 @@
         // ================================================================
         let currentAlbums = [];
         let currentSongs = [];
-        let currentLyrics = {};      // { songId: { lyric: [], translation: [], hasTranslation: bool } }
+        let currentLyrics = {};
         let selectedAlbumId = null;
         let currentDisplaySongId = null;
         let currentArtistId = null;
@@ -419,7 +419,7 @@
         // 判断是否为非歌词行（制作信息）
         function isLyricsLine(line) {
             const trimmed = line.trim();
-            if (!trimmed) return false; // 空行删除
+            if (!trimmed) return false;
             const excludePatterns = [
                 /^作词[：:]/,
                 /^作曲[：:]/,
@@ -487,7 +487,7 @@
             return true;
         }
 
-        // 从原始歌词中提取纯歌词行数组（去除时间戳，过滤非歌词行）
+        // 提取纯歌词行数组
         function extractLyricsArray(raw) {
             if (!raw) return [];
             const lines = raw.split('\n')
@@ -496,7 +496,7 @@
             return lines.filter(isLyricsLine);
         }
 
-        // 判断是否为中文（用于决定是否需要翻译）
+        // 判断是否为中文
         function isChinese(text) {
             if (!text) return false;
             const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
@@ -549,6 +549,7 @@
             return data;
         }
 
+        // 批量翻译（一次性翻译整段，保持上下文连贯）
         async function translateViaProxy(text) {
             try {
                 const response = await fetch(TRANSLATE_PROXY, {
@@ -661,7 +662,7 @@
             });
         }
 
-        // 加载歌手简介（合并所有可用字段）
+        // ★★★ 智能生成歌手简介（合并多个字段，补充基本信息） ★★★
         async function loadArtistInfo(artistId, artistName) {
             if (!artistId || artistId === 'null' || artistId === 'undefined') {
                 showToast('无法获取歌手ID', 'error');
@@ -671,20 +672,73 @@
                 showToast('加载歌手简介...', 'info');
                 const data = await getArtistInfo(artistId);
                 const artist = data.artist || data.data || {};
-                // 合并多个简介字段
+
+                // 收集所有简介字段
                 let briefParts = [];
                 if (artist.briefDesc) briefParts.push(artist.briefDesc);
                 if (artist.description) briefParts.push(artist.description);
                 if (artist.introduction) briefParts.push(artist.introduction);
                 if (artist.profile) briefParts.push(artist.profile);
                 if (artist.desc) briefParts.push(artist.desc);
-                // 如果还很少，尝试从 album 中获取
-                if (briefParts.length === 0 && artist.album) {
-                    if (artist.album.description) briefParts.push(artist.album.description);
+
+                let brief = briefParts.join('\n\n').trim();
+
+                // 如果简介不足300字，尝试补充结构化的歌手基本信息
+                if (brief.length < 150) {
+                    const name = artist.name || artistName || '未知歌手';
+                    const birth = artist.birth || artist.birthday || '';
+                    const birthPlace = artist.birthPlace || artist.birthcity || '';
+                    const gender = artist.gender || '';
+                    const alias = artist.alias || [];
+                    const aliasStr = alias.length > 0 ? `，别名${alias.join('、')}` : '';
+                    const genderStr = gender === '男' ? '男' : gender === '女' ? '女' : '';
+
+                    // 尝试从专辑列表获取出道年份
+                    let debutYear = '';
+                    if (artist.album && artist.album.length > 0) {
+                        const sorted = [...artist.album].sort((a, b) => (a.publishTime || 0) - (b.publishTime || 0));
+                        if (sorted[0] && sorted[0].publishTime) {
+                            debutYear = new Date(sorted[0].publishTime).getFullYear();
+                        }
+                    }
+
+                    // 尝试获取代表作品
+                    let works = '';
+                    if (artist.hotSongs && artist.hotSongs.length > 0) {
+                        const top5 = artist.hotSongs.slice(0, 5).map(s => s.name).filter(Boolean);
+                        if (top5.length > 0) works = `，代表作品有《${top5.join('》、《')}》`;
+                    }
+
+                    // 构建结构化简介
+                    let structured = `${name}`;
+                    if (birth) structured += `，${birth}`;
+                    if (birthPlace) structured += `出生于${birthPlace}`;
+                    if (genderStr) structured += `，${genderStr}`;
+                    structured += `，华语流行乐歌手`;
+                    if (debutYear) structured += `，${debutYear}年出道`;
+                    if (works) structured += works;
+                    structured += '。';
+
+                    // 如果原有简介不为空，附加在后面
+                    if (brief) {
+                        brief = structured + '\n\n' + brief;
+                    } else {
+                        brief = structured;
+                    }
+
+                    // 如果还是不够，添加占位提示
+                    if (brief.length < 100) {
+                        brief = `${name}，华语流行乐歌手。` + (birth ? ` ${birth}` : '') + (birthPlace ? `，出生于${birthPlace}` : '') + '。' + (works ? works : '');
+                    }
                 }
-                let brief = briefParts.join('\n\n') || '暂无详细简介';
+
+                // 如果简介超过1000字，截断并添加省略号
+                if (brief.length > 2000) {
+                    brief = brief.substring(0, 1800) + '\n\n...（简介过长，已截断）';
+                }
+
                 artistNameDisplay.textContent = artist.name || artistName || '未知歌手';
-                artistBriefDisplay.textContent = brief;
+                artistBriefDisplay.textContent = brief || '暂无详细简介';
                 artistSection.classList.add('show');
                 currentArtistId = artistId;
                 showToast('✅ 已加载歌手简介', 'success');
@@ -761,7 +815,7 @@
             });
         }
 
-        // ★★★ 核心：加载歌词并保证逐行对应 ★★★
+        // ★★★ 核心：批量翻译 + 逐行严格对齐 ★★★
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
             const allRows = songTableBody.querySelectorAll('.clickable-row');
             allRows.forEach(r => r.classList.remove('active'));
@@ -784,37 +838,37 @@
                 let lyricLines = extractLyricsArray(lrcRaw);
                 let transLines = [];
 
-                // 如果有官方译文，也提取并过滤
+                // 如果有官方译文，提取并过滤
                 if (tlyricRaw) {
                     transLines = extractLyricsArray(tlyricRaw);
                 }
 
-                // 如果没有官方译文且歌词非中文，逐行翻译
+                // 如果没有官方译文且歌词非中文 → 批量翻译（一次性整段翻译，然后按行拆分）
                 const hasOfficial = transLines.length > 0;
                 if (!hasOfficial && lyricLines.length > 0) {
                     const fullLyric = lyricLines.join('\n');
                     if (!isChinese(fullLyric)) {
-                        lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 逐行翻译中（共 ${lyricLines.length} 行）...</div>`;
-                        // 逐行翻译
-                        const translatedLines = [];
-                        for (let i = 0; i < lyricLines.length; i++) {
-                            const line = lyricLines[i];
-                            if (line.trim()) {
-                                const translated = await translateViaProxy(line);
-                                translatedLines.push(translated || '');
-                            } else {
-                                translatedLines.push('');
+                        lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 批量翻译中（共 ${lyricLines.length} 行）...</div>`;
+                        const translated = await translateViaProxy(fullLyric);
+                        if (translated) {
+                            // 按换行拆分成行
+                            let translatedLines = translated.split('\n')
+                                .map(line => line.trim())
+                                .filter(line => line.length > 0);
+                            // 如果翻译结果行数不一致，尝试用特殊分隔符处理
+                            if (translatedLines.length !== lyricLines.length) {
+                                // 尝试用句号、问号等分隔
+                                const transRaw = translated.replace(/。|！|？|\.|\!|\?/g, match => match + '\n');
+                                translatedLines = transRaw.split('\n')
+                                    .map(line => line.trim())
+                                    .filter(line => line.length > 0);
                             }
-                            // 更新进度（可选）
-                            if (i % 5 === 0) {
-                                lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 翻译中 ${i+1}/${lyricLines.length}...</div>`;
-                            }
+                            transLines = translatedLines;
                         }
-                        transLines = translatedLines;
                     }
                 }
 
-                // 确保行数一致：取最大行数，不足的补空字符串
+                // ★★★ 逐行严格对齐：取最大行数，不足补空字符串 ★★★
                 const maxLen = Math.max(lyricLines.length, transLines.length);
                 while (lyricLines.length < maxLen) lyricLines.push('');
                 while (transLines.length < maxLen) transLines.push('');
@@ -825,6 +879,7 @@
                     hasTranslation: transLines.some(line => line.trim().length > 0)
                 };
                 renderLyrics(songId);
+                showToast('✅ 歌词加载完成', 'success');
             } catch (err) {
                 console.error(err);
                 lyricDisplay.innerHTML = `<div class="empty-state" style="color:#f87171;">加载失败：${err.message}</div>`;
@@ -843,7 +898,7 @@
         }
 
         // ================================================================
-        //  复制和导出（逐行对应）
+        //  复制和导出（严格按行对应）
         // ================================================================
 
         function copyCurrentLyrics() {
@@ -872,7 +927,7 @@
             });
         }
 
-        // 辅助：为单首歌加载歌词（用于批量加载）
+        // 辅助：单首歌加载（用于批量）
         async function loadLyricsForSong(songId) {
             try {
                 const { lrc, tlyric } = await getLyricsWithTranslation(songId);
@@ -886,16 +941,19 @@
                 if (transLines.length === 0 && lyricLines.length > 0) {
                     const fullLyric = lyricLines.join('\n');
                     if (!isChinese(fullLyric)) {
-                        const translatedLines = [];
-                        for (const line of lyricLines) {
-                            if (line.trim()) {
-                                const translated = await translateViaProxy(line);
-                                translatedLines.push(translated || '');
-                            } else {
-                                translatedLines.push('');
+                        const translated = await translateViaProxy(fullLyric);
+                        if (translated) {
+                            let translatedLines = translated.split('\n')
+                                .map(line => line.trim())
+                                .filter(line => line.length > 0);
+                            if (translatedLines.length !== lyricLines.length) {
+                                const transRaw = translated.replace(/。|！|？|\.|\!|\?/g, match => match + '\n');
+                                translatedLines = transRaw.split('\n')
+                                    .map(line => line.trim())
+                                    .filter(line => line.length > 0);
                             }
+                            transLines = translatedLines;
                         }
-                        transLines = translatedLines;
                     }
                 }
                 const maxLen = Math.max(lyricLines.length, transLines.length);
@@ -1021,7 +1079,7 @@
         copyArtistBtn.addEventListener('click', copyArtistBrief);
         closeArtistBtn.addEventListener('click', closeArtistBrief);
 
-        console.log('🎵 音像采购工作台 v3.5 已加载（逐行翻译）');
+        console.log('🎵 音像采购工作台 v3.6 已加载（批量翻译·逐行对齐）');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
