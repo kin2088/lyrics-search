@@ -302,12 +302,22 @@
         .toolbar .spacer {
             flex: 1;
         }
+
+        /* ===== Toast 固定定位 ===== */
         .toast {
-            margin-top: 16px;
-            padding: 12px 18px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
             border-radius: 10px;
             font-size: 14px;
             display: none;
+            z-index: 9999;
+            max-width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: opacity 0.3s;
         }
         .toast.show {
             display: block;
@@ -324,6 +334,7 @@
             background: #d1fae5;
             color: #065f46;
         }
+
         .footer {
             margin-top: 40px;
             border-top: 1px solid #edf2f7;
@@ -362,19 +373,24 @@
                 min-width: unset;
                 max-height: 300px;
             }
+            .toast {
+                bottom: 10px;
+                padding: 10px 16px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.0</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.1</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 左右分栏 · 复制增强
+            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 复制/导出优化
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 原文左列，翻译右列 · 一键复制当前/全部歌词
+                💡 复制歌词左右分列（制表符分隔） · 导出逐行拆分 · 提示固定底部
             </span>
         </div>
 
@@ -437,7 +453,7 @@
                 <span class="spacer"></span>
                 <button class="btn btn-success" id="exportCsvBtn">📥 导出CSV</button>
                 <span style="font-size:13px; color:#94a3b8; margin-left:auto;">
-                    CSV包含：歌名、播放链接、歌词
+                    CSV包含：歌名、行号、原文行、译文行
                 </span>
             </div>
         </div>
@@ -461,7 +477,7 @@
         // ================================================================
         let currentAlbums = [];
         let currentSongs = [];
-        let currentLyrics = {};       // 缓存 { songId: { lyric, translation } }
+        let currentLyrics = {};       // 缓存 { songId: { lyric, translation, hasTranslation } }
         let selectedAlbumId = null;
         let currentDisplaySongId = null;
 
@@ -755,13 +771,11 @@
                 const { lrc, tlyric } = await getLyricsWithTranslation(songId);
                 const formatted = formatLyrics(lrc, tlyric);
 
-                // 如果有官方译文，直接使用；否则判断是否需要翻译
                 let finalTranslation = formatted.translation || null;
                 let hasTrans = formatted.hasOfficialTranslation;
 
                 if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
                     if (!isChinese(formatted.lyric)) {
-                        // 调用翻译服务
                         lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 翻译中...</div>`;
                         const translated = await translateViaProxy(formatted.lyric);
                         if (translated) {
@@ -771,7 +785,6 @@
                     }
                 }
 
-                // 缓存
                 currentLyrics[songId] = {
                     lyric: formatted.lyric,
                     translation: finalTranslation,
@@ -793,10 +806,7 @@
             if (!data) return;
 
             let html = '';
-            // 左列：原文
             html += `<div class="lyric-col"><div class="col-label">📄 原文</div><div class="col-content">${data.lyric || '（暂无歌词）'}</div></div>`;
-
-            // 右列：翻译
             let transContent = data.translation || '（暂无翻译）';
             if (!data.hasTranslation) {
                 transContent = '（暂无翻译）';
@@ -810,16 +820,19 @@
         //  复制功能
         // ================================================================
 
-        // 复制当前歌词（纯文本格式，保留原文和翻译）
+        // 复制当前歌词：左右分列（制表符分隔） 原文整体\t译文整体
         function copyCurrentLyrics() {
             if (!currentDisplaySongId || !currentLyrics[currentDisplaySongId]) {
                 showToast('请先点击一首歌曲查看歌词', 'error');
                 return;
             }
             const data = currentLyrics[currentDisplaySongId];
-            let text = `原文：\n${data.lyric || '（无）'}\n\n翻译：\n${data.translation || '（无）'}`;
+            let text = data.lyric || '';
+            if (data.translation && data.hasTranslation) {
+                text += '\t' + data.translation;
+            }
             navigator.clipboard.writeText(text).then(() => {
-                showToast('✅ 已复制当前歌词', 'success');
+                showToast('✅ 已复制当前歌词（原文\t译文）', 'success');
             }).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = text;
@@ -827,29 +840,27 @@
                 ta.select();
                 document.execCommand('copy');
                 document.body.removeChild(ta);
-                showToast('✅ 已复制当前歌词', 'success');
+                showToast('✅ 已复制当前歌词（原文\t译文）', 'success');
             });
         }
 
-        // 复制全部歌词：先确保所有歌曲都已加载，然后生成全部歌词文本并复制
+        // 复制全部歌词：保持原有格式，但改为制表符分隔每首歌
         async function copyAllLyrics() {
             if (currentSongs.length === 0) {
                 showToast('没有歌曲', 'error');
                 return;
             }
 
-            // 检查是否有未加载的歌曲
+            // 先确保所有歌词已加载
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
                 showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
-                // 逐个加载
                 for (const song of unloaded) {
                     try {
                         const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
                         const formatted = formatLyrics(lrc, tlyric);
                         let finalTranslation = formatted.translation || null;
                         let hasTrans = formatted.hasOfficialTranslation;
-
                         if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
                             if (!isChinese(formatted.lyric)) {
                                 const translated = await translateViaProxy(formatted.lyric);
@@ -876,14 +887,17 @@
                 showToast('✅ 所有歌词加载完成', 'success');
             }
 
-            // 生成全部歌词文本
+            // 生成全部歌词文本，每首歌以制表符分隔原文和译文
             let text = '';
             currentSongs.forEach((song, index) => {
                 const data = currentLyrics[song.id];
                 const name = song.name || '未知歌曲';
                 text += `【${index + 1}】${name}\n`;
-                text += `原文：\n${data?.lyric || '（无）'}\n`;
-                text += `翻译：\n${data?.translation || '（无）'}\n\n`;
+                text += data?.lyric || '（无）';
+                if (data?.translation && data.hasTranslation) {
+                    text += '\t' + data.translation;
+                }
+                text += '\n\n';
             });
 
             navigator.clipboard.writeText(text).then(() => {
@@ -919,7 +933,6 @@
                     const formatted = formatLyrics(lrc, tlyric);
                     let finalTranslation = formatted.translation || null;
                     let hasTrans = formatted.hasOfficialTranslation;
-
                     if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
                         if (!isChinese(formatted.lyric)) {
                             const translated = await translateViaProxy(formatted.lyric);
@@ -948,7 +961,7 @@
         }
 
         // ================================================================
-        //  导出 CSV
+        //  导出 CSV（按行拆分）
         // ================================================================
 
         function exportCsv() {
@@ -957,24 +970,69 @@
                 return;
             }
 
-            // 如果有些歌词未加载，先提示
+            // 先确保所有歌词已加载
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
-                showToast(`请先加载全部歌词（剩余 ${unloaded.length} 首未加载）`, 'error');
-                return;
+                showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
+                // 同步加载所有未加载的歌词（这里复用 loadAllLyrics 的逻辑，但需等待完成）
+                // 为简便，我们直接调用 loadAllLyrics 并等待完成，但它是异步，我们可在此处用 await 调用
+                // 但由于我们已经在 async 函数中，可以 await
+                // 但 loadAllLyrics 内部有 toast 提示，我们直接调用并等待
+                // 为避免重复代码，我们直接在这里加载
+                for (const song of unloaded) {
+                    try {
+                        const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
+                        const formatted = formatLyrics(lrc, tlyric);
+                        let finalTranslation = formatted.translation || null;
+                        let hasTrans = formatted.hasOfficialTranslation;
+                        if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
+                            if (!isChinese(formatted.lyric)) {
+                                const translated = await translateViaProxy(formatted.lyric);
+                                if (translated) {
+                                    finalTranslation = translated;
+                                    hasTrans = true;
+                                }
+                            }
+                        }
+                        currentLyrics[song.id] = {
+                            lyric: formatted.lyric,
+                            translation: finalTranslation,
+                            hasTranslation: hasTrans || !!finalTranslation
+                        };
+                    } catch (e) {
+                        console.warn('加载失败:', song.name, e);
+                        currentLyrics[song.id] = {
+                            lyric: '（加载失败）',
+                            translation: '（加载失败）',
+                            hasTranslation: false
+                        };
+                    }
+                }
+                showToast('✅ 所有歌词加载完成', 'success');
             }
 
-            let rows = [['序号', '歌名', '播放链接', '原文歌词', '翻译歌词']];
-            currentSongs.forEach((song, index) => {
+            // 构建 CSV 行，按行拆分歌词
+            const rows = [];
+            // 表头
+            rows.push(['序号', '歌名', '行号', '原文行', '译文行']);
+
+            currentSongs.forEach((song, idx) => {
                 const data = currentLyrics[song.id];
-                const name = song.name || '未知歌曲';
-                const id = song.id;
-                const url = `https://music.163.com/song?id=${id}`;
-                const lyric = data?.lyric || '（无）';
-                const translation = data?.translation || '（无）';
-                rows.push([index + 1, name, url, lyric, translation]);
+                const lyricText = data?.lyric || '';
+                const transText = data?.translation || '';
+                // 按换行拆分行
+                const lyricLines = lyricText.split('\n').filter(line => line.trim() !== '');
+                const transLines = transText.split('\n').filter(line => line.trim() !== '');
+                // 取两者最大行数，不足的留空
+                const maxLines = Math.max(lyricLines.length, transLines.length);
+                for (let i = 0; i < maxLines; i++) {
+                    const lyricLine = lyricLines[i] || '';
+                    const transLine = transLines[i] || '';
+                    rows.push([idx + 1, song.name || '未知歌曲', i + 1, lyricLine, transLine]);
+                }
             });
 
+            // 生成 CSV 字符串
             const csvContent = rows.map(row =>
                 row.map(cell => {
                     if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
@@ -987,11 +1045,11 @@
             const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const albumName = currentAlbums.find(a => a.id === selectedAlbumId)?.name || '专辑';
-            link.download = `${albumName}_歌曲列表.csv`;
+            link.download = `${albumName}_逐行歌词.csv`;
             link.href = URL.createObjectURL(blob);
             link.click();
             URL.revokeObjectURL(link.href);
-            showToast(`✅ 导出成功！共 ${currentSongs.length} 首歌曲`, 'success');
+            showToast(`✅ 导出成功！共 ${currentSongs.length} 首歌，${rows.length-1} 行歌词`, 'success');
         }
 
         // ================================================================
@@ -1006,7 +1064,7 @@
         copyAllBtn.addEventListener('click', copyAllLyrics);
         loadAllBtn.addEventListener('click', loadAllLyrics);
 
-        console.log('🎵 音像采购工作台 v3.0 已加载');
+        console.log('🎵 音像采购工作台 v3.1 已加载');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
