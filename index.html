@@ -205,7 +205,6 @@
             color: #94a3b8;
         }
 
-        /* 歌手简介区域 */
         .artist-section {
             margin-top: 16px;
             padding: 16px 20px;
@@ -224,12 +223,13 @@
             align-items: center;
             gap: 12px;
             margin-bottom: 8px;
+            flex-wrap: wrap;
         }
         .artist-section .artist-brief {
             font-size: 14px;
             line-height: 1.8;
             color: #334155;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-word;
@@ -285,7 +285,6 @@
             background: #dbeafe;
         }
 
-        /* ===== 歌词区域：左右分栏 ===== */
         .lyric-box {
             display: flex;
             flex-wrap: wrap;
@@ -345,7 +344,6 @@
             flex: 1;
         }
 
-        /* ===== Toast 固定定位 ===== */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -424,14 +422,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.3</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.4</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 歌手简介 · 纯净歌词
+            ✅ 网易云音乐歌词搜索 · 独立翻译 · 歌手简介扩容 · 歌词逐行对齐
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 点击歌手名查看简介 · 歌词自动过滤非歌词内容
+                💡 点击歌手名查看完整简介 · 原文/译文逐行对应
             </span>
         </div>
 
@@ -456,7 +454,6 @@
                 <span class="search-keyword-display" id="searchKeywordDisplay"></span>
             </div>
             <div class="card" id="albumList"></div>
-            <!-- 歌手简介区域 -->
             <div class="artist-section" id="artistSection">
                 <div class="artist-name">
                     <span id="artistNameDisplay"></span>
@@ -527,7 +524,7 @@
         // ================================================================
         let currentAlbums = [];
         let currentSongs = [];
-        let currentLyrics = {};
+        let currentLyrics = {};      // { songId: { lyric, translation, hasTranslation } } 均为纯歌词字符串（无时间戳、无制作信息）
         let selectedAlbumId = null;
         let currentDisplaySongId = null;
         let currentArtistId = null;
@@ -567,20 +564,14 @@
             toast.className = 'toast';
         }
 
-        function cleanLyrics(raw) {
-            if (!raw || raw === '暂无歌词') return '暂无歌词';
-            let cleaned = raw
-                .split('\n')
-                .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
-                .filter(line => line.length > 0);
-            if (cleaned.length === 0) return '（纯音乐或无歌词）';
-            return cleaned.join('\n');
-        }
-
         /**
-         * 过滤非歌词内容：移除作词、作曲、编曲、制作人、混音、录音、和声、吉他、鼓、贝斯等
+         * 过滤非歌词内容（扩展版，支持中/英/日/韩）
+         * 返回 true 表示保留，false 表示删除
          */
-        function filterNonLyrics(lines) {
+        function isLyricsLine(line) {
+            const trimmed = line.trim();
+            if (!trimmed) return false; // 空行删除（后续可根据需要保留，但这里为了对齐，统一删除）
+            // 排除模式（正则）
             const excludePatterns = [
                 /^作词[：:]/,
                 /^作曲[：:]/,
@@ -622,62 +613,69 @@
                 /^Guitar/,
                 /^Bass/,
                 /^Drums/,
-                /^Keyboards/
+                /^Keyboards/,
+                /^Synthesizer/,
+                /^Programming/,
+                /^Written-By/,
+                /^Lyrics By/,
+                /^Music By/,
+                /^Arranged By/,
+                /^Mixed At/,
+                /^Recorded At/,
+                /^Mastered At/,
+                /^Published by/,
+                /^Copyright/,
+                /^℗ /,
+                /^© /,
+                /^\(P\)/,
+                /^\(C\)/
             ];
-
-            return lines.filter(line => {
-                const trimmed = line.trim();
-                if (!trimmed) return true; // 保留空行
-                // 检查是否匹配排除模式
-                for (const pattern of excludePatterns) {
-                    if (pattern.test(trimmed)) {
-                        return false;
-                    }
-                }
-                // 检查是否包含括号内的制作信息
-                if (/\([^)]*(制作|录音|混音|编曲|作词|作曲|监制|出品)[^)]*\)/.test(trimmed)) {
+            for (const pattern of excludePatterns) {
+                if (pattern.test(trimmed)) {
                     return false;
                 }
-                return true;
-            });
+            }
+            // 检查是否包含括号内的制作信息
+            if (/\([^)]*(制作|录音|混音|编曲|作词|作曲|监制|出品|发行|Produced|Mixed|Recorded|Mastered|Engineer)[^)]*\)/.test(trimmed)) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 对歌词字符串进行过滤，返回纯歌词行数组（不含空行）
+         */
+        function filterLyricsToArray(raw) {
+            if (!raw) return [];
+            const lines = raw.split('\n')
+                .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
+                .filter(line => line.length > 0);
+            return lines.filter(isLyricsLine);
+        }
+
+        /**
+         * 对原文和译文分别过滤，然后逐行对齐（取最大行数，不足补空字符串）
+         */
+        function alignLyrics(lyricRaw, transRaw) {
+            const lyricLines = filterLyricsToArray(lyricRaw);
+            const transLines = transRaw ? filterLyricsToArray(transRaw) : [];
+            const maxLen = Math.max(lyricLines.length, transLines.length);
+            const alignedLyric = [];
+            const alignedTrans = [];
+            for (let i = 0; i < maxLen; i++) {
+                alignedLyric.push(lyricLines[i] || '');
+                alignedTrans.push(transLines[i] || '');
+            }
+            return { lyric: alignedLyric, translation: alignedTrans };
         }
 
         function isChinese(text) {
-            if (!text || text.length === 0) return false;
+            if (!text) return false;
             const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
             if (meaningful.length === 0) return false;
             const chineseChars = meaningful.match(/[\u4e00-\u9fff]/g);
             if (!chineseChars) return false;
             return chineseChars.length / meaningful.length >= 0.3;
-        }
-
-        function formatLyrics(lrcData, tlyricData) {
-            const result = { lyric: '', translation: '', hasOfficialTranslation: false };
-            if (lrcData && lrcData.lyric) {
-                // 先清洗时间戳，然后过滤非歌词内容
-                const rawLines = lrcData.lyric
-                    .split('\n')
-                    .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
-                    .filter(line => line.length > 0);
-                const filteredLines = filterNonLyrics(rawLines);
-                result.lyric = filteredLines.join('\n') || '暂无歌词';
-            } else {
-                result.lyric = '暂无歌词';
-            }
-            if (tlyricData && tlyricData.lyric) {
-                // 对翻译也做同样的过滤
-                const rawLines = tlyricData.lyric
-                    .split('\n')
-                    .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
-                    .filter(line => line.length > 0);
-                const filteredLines = filterNonLyrics(rawLines);
-                const trans = filteredLines.join('\n');
-                if (trans && trans !== '暂无歌词' && trans !== '（纯音乐或无歌词）') {
-                    result.translation = trans;
-                    result.hasOfficialTranslation = true;
-                }
-            }
-            return result;
         }
 
         // ================================================================
@@ -843,7 +841,6 @@
                 div.addEventListener('click', () => {
                     selectAlbum(alb.id);
                 });
-                // 点击歌手名触发简介
                 const artistLink = div.querySelector('.artist-link');
                 if (artistLink) {
                     artistLink.addEventListener('click', (e) => {
@@ -870,7 +867,14 @@
                 showToast('加载歌手简介...', 'info');
                 const data = await getArtistInfo(artistId);
                 const artist = data.artist || data.data || {};
-                const brief = artist.briefDesc || artist.briefDesc || artist.description || '暂无简介';
+                // 获取简介：尝试多个字段，取最长的
+                let brief = artist.briefDesc || artist.description || artist.introduction || artist.profile || '';
+                if (brief.length < 50 && artist.desc) {
+                    brief = artist.desc;
+                }
+                if (!brief || brief.length < 10) {
+                    brief = '暂无详细简介';
+                }
                 artistNameDisplay.textContent = artist.name || artistName || '未知歌手';
                 artistBriefDisplay.textContent = brief;
                 artistSection.classList.add('show');
@@ -882,10 +886,9 @@
             }
         }
 
-        // 复制歌手简介
         function copyArtistBrief() {
             const text = artistBriefDisplay.textContent;
-            if (!text || text === '暂无简介') {
+            if (!text || text === '暂无详细简介') {
                 showToast('没有简介可复制', 'error');
                 return;
             }
@@ -903,7 +906,6 @@
             });
         }
 
-        // 关闭歌手简介
         function closeArtistBrief() {
             artistSection.classList.remove('show');
         }
@@ -972,26 +974,36 @@
             try {
                 lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 加载歌词...</div>`;
                 const { lrc, tlyric } = await getLyricsWithTranslation(songId);
-                const formatted = formatLyrics(lrc, tlyric);
+                const lrcRaw = lrc?.lyric || '';
+                const tlyricRaw = tlyric?.lyric || '';
 
-                let finalTranslation = formatted.translation || null;
-                let hasTrans = formatted.hasOfficialTranslation;
+                // 对齐原文和译文（逐行过滤）
+                let aligned = alignLyrics(lrcRaw, tlyricRaw);
+                let lyricLines = aligned.lyric;
+                let transLines = aligned.translation;
 
-                if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
-                    if (!isChinese(formatted.lyric)) {
+                // 如果译文为空，但原文非中文，调用翻译
+                let hasTranslation = transLines.some(line => line.length > 0);
+                if (!hasTranslation && lyricLines.some(line => line.length > 0)) {
+                    const fullLyric = lyricLines.join('\n');
+                    if (!isChinese(fullLyric)) {
                         lyricDisplay.innerHTML = `<div class="empty-state" style="color:#64748b;">⏳ 翻译中...</div>`;
-                        const translated = await translateViaProxy(formatted.lyric);
+                        const translated = await translateViaProxy(fullLyric);
                         if (translated) {
-                            finalTranslation = translated;
-                            hasTrans = true;
+                            // 对翻译结果进行过滤和对齐
+                            const transRaw = translated;
+                            const newAligned = alignLyrics(fullLyric, transRaw);
+                            lyricLines = newAligned.lyric;
+                            transLines = newAligned.translation;
+                            hasTranslation = transLines.some(line => line.length > 0);
                         }
                     }
                 }
 
                 currentLyrics[songId] = {
-                    lyric: formatted.lyric,
-                    translation: finalTranslation,
-                    hasTranslation: hasTrans || !!finalTranslation
+                    lyric: lyricLines,
+                    translation: transLines,
+                    hasTranslation: hasTranslation
                 };
                 renderLyrics(songId);
 
@@ -1005,19 +1017,17 @@
             const data = currentLyrics[songId];
             if (!data) return;
 
-            let html = '';
-            html += `<div class="lyric-col"><div class="col-label">📄 原文</div><div class="col-content">${data.lyric || '（暂无歌词）'}</div></div>`;
-            let transContent = data.translation || '（暂无翻译）';
-            if (!data.hasTranslation) {
-                transContent = '（暂无翻译）';
-            }
-            html += `<div class="lyric-col"><div class="col-label">🌐 翻译</div><div class="col-content">${transContent}</div></div>`;
+            const lyricText = data.lyric.join('\n') || '（暂无歌词）';
+            const transText = data.hasTranslation ? data.translation.join('\n') : '（暂无翻译）';
 
+            let html = '';
+            html += `<div class="lyric-col"><div class="col-label">📄 原文</div><div class="col-content">${lyricText}</div></div>`;
+            html += `<div class="lyric-col"><div class="col-label">🌐 翻译</div><div class="col-content">${transText}</div></div>`;
             lyricDisplay.innerHTML = html;
         }
 
         // ================================================================
-        //  复制功能
+        //  复制功能（逐行对齐）
         // ================================================================
 
         function copyCurrentLyrics() {
@@ -1026,12 +1036,15 @@
                 return;
             }
             const data = currentLyrics[currentDisplaySongId];
-            let text = data.lyric || '';
-            if (data.translation && data.hasTranslation) {
-                text += '\t' + data.translation;
+            const maxLen = Math.max(data.lyric.length, data.translation.length);
+            let text = '';
+            for (let i = 0; i < maxLen; i++) {
+                const l = data.lyric[i] || '';
+                const t = data.translation[i] || '';
+                text += l + '\t' + t + '\n';
             }
             navigator.clipboard.writeText(text).then(() => {
-                showToast('✅ 已复制当前歌词（原文\t译文）', 'success');
+                showToast('✅ 已复制当前歌词（左右分列）', 'success');
             }).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = text;
@@ -1039,7 +1052,7 @@
                 ta.select();
                 document.execCommand('copy');
                 document.body.removeChild(ta);
-                showToast('✅ 已复制当前歌词（原文\t译文）', 'success');
+                showToast('✅ 已复制当前歌词（左右分列）', 'success');
             });
         }
 
@@ -1049,51 +1062,29 @@
                 return;
             }
 
+            // 先加载所有未加载的歌曲
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
-                showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
+                showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词...`, 'info');
                 for (const song of unloaded) {
-                    try {
-                        const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
-                        const formatted = formatLyrics(lrc, tlyric);
-                        let finalTranslation = formatted.translation || null;
-                        let hasTrans = formatted.hasOfficialTranslation;
-                        if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
-                            if (!isChinese(formatted.lyric)) {
-                                const translated = await translateViaProxy(formatted.lyric);
-                                if (translated) {
-                                    finalTranslation = translated;
-                                    hasTrans = true;
-                                }
-                            }
-                        }
-                        currentLyrics[song.id] = {
-                            lyric: formatted.lyric,
-                            translation: finalTranslation,
-                            hasTranslation: hasTrans || !!finalTranslation
-                        };
-                    } catch (e) {
-                        console.warn('加载歌词失败:', song.name, e);
-                        currentLyrics[song.id] = {
-                            lyric: '（加载失败）',
-                            translation: '（加载失败）',
-                            hasTranslation: false
-                        };
-                    }
+                    await loadLyricsForSong(song.id);
                 }
                 showToast('✅ 所有歌词加载完成', 'success');
             }
 
             let text = '';
-            currentSongs.forEach((song, index) => {
+            currentSongs.forEach((song, idx) => {
                 const data = currentLyrics[song.id];
+                if (!data) return;
                 const name = song.name || '未知歌曲';
-                text += `【${index + 1}】${name}\n`;
-                text += data?.lyric || '（无）';
-                if (data?.translation && data.hasTranslation) {
-                    text += '\t' + data.translation;
+                text += `【${idx + 1}】${name}\n`;
+                const maxLen = Math.max(data.lyric.length, data.translation.length);
+                for (let i = 0; i < maxLen; i++) {
+                    const l = data.lyric[i] || '';
+                    const t = data.translation[i] || '';
+                    text += l + '\t' + t + '\n';
                 }
-                text += '\n\n';
+                text += '\n';
             });
 
             navigator.clipboard.writeText(text).then(() => {
@@ -1107,6 +1098,43 @@
                 document.body.removeChild(ta);
                 showToast(`✅ 已复制全部歌词（${currentSongs.length} 首）`, 'success');
             });
+        }
+
+        // 辅助：加载单首歌歌词（内部使用）
+        async function loadLyricsForSong(songId) {
+            try {
+                const { lrc, tlyric } = await getLyricsWithTranslation(songId);
+                const lrcRaw = lrc?.lyric || '';
+                const tlyricRaw = tlyric?.lyric || '';
+                let aligned = alignLyrics(lrcRaw, tlyricRaw);
+                let lyricLines = aligned.lyric;
+                let transLines = aligned.translation;
+                let hasTranslation = transLines.some(line => line.length > 0);
+                if (!hasTranslation && lyricLines.some(line => line.length > 0)) {
+                    const fullLyric = lyricLines.join('\n');
+                    if (!isChinese(fullLyric)) {
+                        const translated = await translateViaProxy(fullLyric);
+                        if (translated) {
+                            const newAligned = alignLyrics(fullLyric, translated);
+                            lyricLines = newAligned.lyric;
+                            transLines = newAligned.translation;
+                            hasTranslation = transLines.some(line => line.length > 0);
+                        }
+                    }
+                }
+                currentLyrics[songId] = {
+                    lyric: lyricLines,
+                    translation: transLines,
+                    hasTranslation: hasTranslation
+                };
+            } catch (e) {
+                console.warn('加载歌词失败:', songId, e);
+                currentLyrics[songId] = {
+                    lyric: ['（加载失败）'],
+                    translation: ['（加载失败）'],
+                    hasTranslation: false
+                };
+            }
         }
 
         async function loadAllLyrics() {
@@ -1119,44 +1147,21 @@
                 showToast('所有歌词已加载', 'success');
                 return;
             }
-
             showToast(`⏳ 正在加载 ${unloaded.length} 首歌词...`, 'info');
-            let successCount = 0;
+            let success = 0;
             for (const song of unloaded) {
                 try {
-                    const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
-                    const formatted = formatLyrics(lrc, tlyric);
-                    let finalTranslation = formatted.translation || null;
-                    let hasTrans = formatted.hasOfficialTranslation;
-                    if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
-                        if (!isChinese(formatted.lyric)) {
-                            const translated = await translateViaProxy(formatted.lyric);
-                            if (translated) {
-                                finalTranslation = translated;
-                                hasTrans = true;
-                            }
-                        }
-                    }
-                    currentLyrics[song.id] = {
-                        lyric: formatted.lyric,
-                        translation: finalTranslation,
-                        hasTranslation: hasTrans || !!finalTranslation
-                    };
-                    successCount++;
+                    await loadLyricsForSong(song.id);
+                    success++;
                 } catch (e) {
                     console.warn('加载失败:', song.name, e);
-                    currentLyrics[song.id] = {
-                        lyric: '（加载失败）',
-                        translation: '（加载失败）',
-                        hasTranslation: false
-                    };
                 }
             }
-            showToast(`✅ 加载完成：${successCount}/${unloaded.length}`, 'success');
+            showToast(`✅ 加载完成：${success}/${unloaded.length}`, 'success');
         }
 
         // ================================================================
-        //  导出 CSV（按行拆分）
+        //  导出 CSV（逐行对齐）
         // ================================================================
 
         async function exportCsv() {
@@ -1167,35 +1172,9 @@
 
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
-                showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
+                showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词...`, 'info');
                 for (const song of unloaded) {
-                    try {
-                        const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
-                        const formatted = formatLyrics(lrc, tlyric);
-                        let finalTranslation = formatted.translation || null;
-                        let hasTrans = formatted.hasOfficialTranslation;
-                        if (!hasTrans && formatted.lyric && formatted.lyric !== '暂无歌词' && formatted.lyric !== '（纯音乐或无歌词）') {
-                            if (!isChinese(formatted.lyric)) {
-                                const translated = await translateViaProxy(formatted.lyric);
-                                if (translated) {
-                                    finalTranslation = translated;
-                                    hasTrans = true;
-                                }
-                            }
-                        }
-                        currentLyrics[song.id] = {
-                            lyric: formatted.lyric,
-                            translation: finalTranslation,
-                            hasTranslation: hasTrans || !!finalTranslation
-                        };
-                    } catch (e) {
-                        console.warn('加载失败:', song.name, e);
-                        currentLyrics[song.id] = {
-                            lyric: '（加载失败）',
-                            translation: '（加载失败）',
-                            hasTranslation: false
-                        };
-                    }
+                    await loadLyricsForSong(song.id);
                 }
                 showToast('✅ 所有歌词加载完成', 'success');
             }
@@ -1205,15 +1184,12 @@
 
             currentSongs.forEach((song, idx) => {
                 const data = currentLyrics[song.id];
-                const lyricText = data?.lyric || '';
-                const transText = data?.translation || '';
-                const lyricLines = lyricText.split('\n').filter(line => line.trim() !== '');
-                const transLines = transText.split('\n').filter(line => line.trim() !== '');
-                const maxLines = Math.max(lyricLines.length, transLines.length);
-                for (let i = 0; i < maxLines; i++) {
-                    const lyricLine = lyricLines[i] || '';
-                    const transLine = transLines[i] || '';
-                    rows.push([idx + 1, song.name || '未知歌曲', i + 1, lyricLine, transLine]);
+                if (!data) return;
+                const maxLen = Math.max(data.lyric.length, data.translation.length);
+                for (let i = 0; i < maxLen; i++) {
+                    const l = data.lyric[i] || '';
+                    const t = data.translation[i] || '';
+                    rows.push([idx + 1, song.name || '未知歌曲', i + 1, l, t]);
                 }
             });
 
@@ -1250,7 +1226,7 @@
         copyArtistBtn.addEventListener('click', copyArtistBrief);
         closeArtistBtn.addEventListener('click', closeArtistBrief);
 
-        console.log('🎵 音像采购工作台 v3.3 已加载');
+        console.log('🎵 音像采购工作台 v3.4 已加载');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
