@@ -121,6 +121,13 @@
         .btn-warning:hover {
             background: #d97706;
         }
+        .btn-secondary {
+            background: #8b5cf6;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #7c3aed;
+        }
         .search-bar .btn {
             align-self: flex-end;
             height: 44px;
@@ -197,6 +204,41 @@
             font-size: 12px;
             color: #94a3b8;
         }
+
+        /* 歌手简介区域 */
+        .artist-section {
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: #f8fafc;
+            border: 1px solid #e9edf2;
+            border-radius: 14px;
+            display: none;
+        }
+        .artist-section.show {
+            display: block;
+        }
+        .artist-section .artist-name {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .artist-section .artist-brief {
+            font-size: 14px;
+            line-height: 1.8;
+            color: #334155;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .artist-section .artist-brief .empty-hint {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
         .table-wrap {
             overflow-x: auto;
             border: 1px solid #edf2f7;
@@ -382,14 +424,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.2</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.3</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 复制/导出优化 · 搜索修复
+            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 歌手简介 · 纯净歌词
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
                 <br />
-                💡 复制歌词左右分列（制表符分隔） · 导出逐行拆分 · 提示固定底部
+                💡 点击歌手名查看简介 · 歌词自动过滤非歌词内容
             </span>
         </div>
 
@@ -414,6 +456,15 @@
                 <span class="search-keyword-display" id="searchKeywordDisplay"></span>
             </div>
             <div class="card" id="albumList"></div>
+            <!-- 歌手简介区域 -->
+            <div class="artist-section" id="artistSection">
+                <div class="artist-name">
+                    <span id="artistNameDisplay"></span>
+                    <button class="btn btn-secondary" id="copyArtistBtn" style="font-size:12px; padding:4px 12px;">📋 复制简介</button>
+                    <button class="btn btn-outline" id="closeArtistBtn" style="font-size:12px; padding:4px 12px;">✕ 收起</button>
+                </div>
+                <div class="artist-brief" id="artistBriefDisplay"></div>
+            </div>
         </div>
 
         <div class="section" id="songSection" style="display:none;">
@@ -479,6 +530,7 @@
         let currentLyrics = {};
         let selectedAlbumId = null;
         let currentDisplaySongId = null;
+        let currentArtistId = null;
 
         const albumInput = document.getElementById('albumInput');
         const artistInput = document.getElementById('artistInput');
@@ -497,6 +549,11 @@
         const copyCurrentBtn = document.getElementById('copyCurrentBtn');
         const copyAllBtn = document.getElementById('copyAllBtn');
         const loadAllBtn = document.getElementById('loadAllBtn');
+        const artistSection = document.getElementById('artistSection');
+        const artistNameDisplay = document.getElementById('artistNameDisplay');
+        const artistBriefDisplay = document.getElementById('artistBriefDisplay');
+        const copyArtistBtn = document.getElementById('copyArtistBtn');
+        const closeArtistBtn = document.getElementById('closeArtistBtn');
 
         // ================================================================
         //  工具函数
@@ -520,6 +577,71 @@
             return cleaned.join('\n');
         }
 
+        /**
+         * 过滤非歌词内容：移除作词、作曲、编曲、制作人、混音、录音、和声、吉他、鼓、贝斯等
+         */
+        function filterNonLyrics(lines) {
+            const excludePatterns = [
+                /^作词[：:]/,
+                /^作曲[：:]/,
+                /^编曲[：:]/,
+                /^制作人[：:]/,
+                /^混音[：:]/,
+                /^录音[：:]/,
+                /^和声[：:]/,
+                /^吉他[：:]/,
+                /^鼓[：:]/,
+                /^贝斯[：:]/,
+                /^低音吉他[：:]/,
+                /^弦乐[：:]/,
+                /^键盘[：:]/,
+                /^钢琴[：:]/,
+                /^小提琴[：:]/,
+                /^大提琴[：:]/,
+                /^制作[：:]/,
+                /^监制[：:]/,
+                /^出品[：:]/,
+                /^发行[：:]/,
+                /^OP[：:]/,
+                /^SP[：:]/,
+                /^℗/,
+                /^©/,
+                /^（.*制作）/,
+                /^（.*录音）/,
+                /^（.*混音）/,
+                /^附加制作/,
+                /^Additional Production/,
+                /^Produced by/,
+                /^Mixed by/,
+                /^Recorded by/,
+                /^Mastered by/,
+                /^Engineer/,
+                /^Strings/,
+                /^Background Vocals/,
+                /^Piano/,
+                /^Guitar/,
+                /^Bass/,
+                /^Drums/,
+                /^Keyboards/
+            ];
+
+            return lines.filter(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return true; // 保留空行
+                // 检查是否匹配排除模式
+                for (const pattern of excludePatterns) {
+                    if (pattern.test(trimmed)) {
+                        return false;
+                    }
+                }
+                // 检查是否包含括号内的制作信息
+                if (/\([^)]*(制作|录音|混音|编曲|作词|作曲|监制|出品)[^)]*\)/.test(trimmed)) {
+                    return false;
+                }
+                return true;
+            });
+        }
+
         function isChinese(text) {
             if (!text || text.length === 0) return false;
             const meaningful = text.replace(/[\s\n\r\t,.'"?!()\-—…，。！？、；：""''（）《》]/g, '');
@@ -532,12 +654,24 @@
         function formatLyrics(lrcData, tlyricData) {
             const result = { lyric: '', translation: '', hasOfficialTranslation: false };
             if (lrcData && lrcData.lyric) {
-                result.lyric = cleanLyrics(lrcData.lyric);
+                // 先清洗时间戳，然后过滤非歌词内容
+                const rawLines = lrcData.lyric
+                    .split('\n')
+                    .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
+                    .filter(line => line.length > 0);
+                const filteredLines = filterNonLyrics(rawLines);
+                result.lyric = filteredLines.join('\n') || '暂无歌词';
             } else {
                 result.lyric = '暂无歌词';
             }
             if (tlyricData && tlyricData.lyric) {
-                const trans = cleanLyrics(tlyricData.lyric);
+                // 对翻译也做同样的过滤
+                const rawLines = tlyricData.lyric
+                    .split('\n')
+                    .map(line => line.replace(/\[\d{2}:\d{2}(\.\d{2,3})?\]/g, '').trim())
+                    .filter(line => line.length > 0);
+                const filteredLines = filterNonLyrics(rawLines);
+                const trans = filteredLines.join('\n');
                 if (trans && trans !== '暂无歌词' && trans !== '（纯音乐或无歌词）') {
                     result.translation = trans;
                     result.hasOfficialTranslation = true;
@@ -586,6 +720,17 @@
             };
         }
 
+        async function getArtistInfo(artistId) {
+            const url = `${API_BASE}artists?id=${artistId}`;
+            console.log('🎤 歌手信息请求:', url);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            console.log('🎤 歌手信息:', data);
+            if (data.code !== 200) throw new Error(data.msg || '获取歌手信息失败');
+            return data;
+        }
+
         async function translateViaProxy(text) {
             try {
                 const response = await fetch(TRANSLATE_PROXY, {
@@ -627,10 +772,12 @@
 
             albumSection.style.display = 'none';
             songSection.style.display = 'none';
+            artistSection.classList.remove('show');
             currentAlbums = [];
             currentSongs = [];
             currentLyrics = {};
             currentDisplaySongId = null;
+            currentArtistId = null;
 
             try {
                 const albums = await searchAlbums(albumKeyword);
@@ -681,13 +828,14 @@
                 const div = document.createElement('div');
                 div.className = 'card-item';
                 const artistName = alb.artist?.name || alb.artists?.map(a => a.name).join('/') || '未知歌手';
+                const artistId = alb.artist?.id || alb.artists?.[0]?.id || null;
                 const name = alb.name || '未命名专辑';
                 const year = alb.publishTime ? new Date(alb.publishTime).getFullYear() : '';
 
                 div.innerHTML = `
                     <span style="font-weight:500; min-width:28px;">${index + 1}</span>
                     <span style="font-weight:500;">${name}</span>
-                    <span style="color:#64748b;">- ${artistName}</span>
+                    <span style="color:#64748b; cursor:pointer;" class="artist-link" data-artist-id="${artistId}" data-artist-name="${artistName}">- ${artistName}</span>
                     ${year ? `<span style="color:#94a3b8; font-size:13px;">(${year})</span>` : ''}
                     <span class="tag netease">网易云</span>
                     <span class="source">${alb.id}</span>
@@ -695,8 +843,69 @@
                 div.addEventListener('click', () => {
                     selectAlbum(alb.id);
                 });
+                // 点击歌手名触发简介
+                const artistLink = div.querySelector('.artist-link');
+                if (artistLink) {
+                    artistLink.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const id = artistLink.dataset.artistId;
+                        const name = artistLink.dataset.artistName;
+                        if (id && id !== 'null' && id !== 'undefined') {
+                            loadArtistInfo(id, name);
+                        } else {
+                            showToast('该歌手暂无简介信息', 'info');
+                        }
+                    });
+                }
                 albumList.appendChild(div);
             });
+        }
+
+        async function loadArtistInfo(artistId, artistName) {
+            if (!artistId || artistId === 'null' || artistId === 'undefined') {
+                showToast('无法获取歌手ID', 'error');
+                return;
+            }
+            try {
+                showToast('加载歌手简介...', 'info');
+                const data = await getArtistInfo(artistId);
+                const artist = data.artist || data.data || {};
+                const brief = artist.briefDesc || artist.briefDesc || artist.description || '暂无简介';
+                artistNameDisplay.textContent = artist.name || artistName || '未知歌手';
+                artistBriefDisplay.textContent = brief;
+                artistSection.classList.add('show');
+                currentArtistId = artistId;
+                showToast('✅ 已加载歌手简介', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('加载歌手简介失败：' + err.message, 'error');
+            }
+        }
+
+        // 复制歌手简介
+        function copyArtistBrief() {
+            const text = artistBriefDisplay.textContent;
+            if (!text || text === '暂无简介') {
+                showToast('没有简介可复制', 'error');
+                return;
+            }
+            const fullText = `${artistNameDisplay.textContent}\n\n${text}`;
+            navigator.clipboard.writeText(fullText).then(() => {
+                showToast('✅ 已复制歌手简介', 'success');
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = fullText;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('✅ 已复制歌手简介', 'success');
+            });
+        }
+
+        // 关闭歌手简介
+        function closeArtistBrief() {
+            artistSection.classList.remove('show');
         }
 
         async function selectAlbum(albumId) {
@@ -1038,8 +1247,10 @@
         copyCurrentBtn.addEventListener('click', copyCurrentLyrics);
         copyAllBtn.addEventListener('click', copyAllLyrics);
         loadAllBtn.addEventListener('click', loadAllLyrics);
+        copyArtistBtn.addEventListener('click', copyArtistBrief);
+        closeArtistBtn.addEventListener('click', closeArtistBrief);
 
-        console.log('🎵 音像采购工作台 v3.2 已加载');
+        console.log('🎵 音像采购工作台 v3.3 已加载');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
