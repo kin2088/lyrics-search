@@ -317,7 +317,6 @@
             max-width: 90%;
             text-align: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: opacity 0.3s;
         }
         .toast.show {
             display: block;
@@ -383,9 +382,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.1</span></h1>
+        <h1>🎵 音像采购工作台 <span style="font-size:14px; font-weight:400; color:#10b981;">v3.2</span></h1>
         <div class="subtitle">
-            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 复制/导出优化
+            ✅ 网易云音乐歌词搜索 · 独立翻译微服务 · 复制/导出优化 · 搜索修复
             <br />
             <span style="font-size:13px; color:#94a3b8;">
                 ✅ API地址：<span id="apiDisplay">https://my-music-api.vercel.app</span>
@@ -477,7 +476,7 @@
         // ================================================================
         let currentAlbums = [];
         let currentSongs = [];
-        let currentLyrics = {};       // 缓存 { songId: { lyric, translation, hasTranslation } }
+        let currentLyrics = {};
         let selectedAlbumId = null;
         let currentDisplaySongId = null;
 
@@ -587,7 +586,6 @@
             };
         }
 
-        // 调用独立的翻译微服务
         async function translateViaProxy(text) {
             try {
                 const response = await fetch(TRANSLATE_PROXY, {
@@ -750,9 +748,6 @@
             });
         }
 
-        /**
-         * 核心函数：加载歌词并显示为左右分栏
-         */
         async function loadLyricsWithTranslation(songId, songName, rowElement) {
             const allRows = songTableBody.querySelectorAll('.clickable-row');
             allRows.forEach(r => r.classList.remove('active'));
@@ -760,7 +755,6 @@
             currentSongName.textContent = `🎵 ${songName}`;
             currentDisplaySongId = songId;
 
-            // 如果已经缓存，直接显示
             if (currentLyrics[songId]) {
                 renderLyrics(songId);
                 return;
@@ -798,9 +792,6 @@
             }
         }
 
-        /**
-         * 渲染歌词左右分栏
-         */
         function renderLyrics(songId) {
             const data = currentLyrics[songId];
             if (!data) return;
@@ -820,7 +811,6 @@
         //  复制功能
         // ================================================================
 
-        // 复制当前歌词：左右分列（制表符分隔） 原文整体\t译文整体
         function copyCurrentLyrics() {
             if (!currentDisplaySongId || !currentLyrics[currentDisplaySongId]) {
                 showToast('请先点击一首歌曲查看歌词', 'error');
@@ -844,14 +834,12 @@
             });
         }
 
-        // 复制全部歌词：保持原有格式，但改为制表符分隔每首歌
         async function copyAllLyrics() {
             if (currentSongs.length === 0) {
                 showToast('没有歌曲', 'error');
                 return;
             }
 
-            // 先确保所有歌词已加载
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
                 showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
@@ -887,7 +875,6 @@
                 showToast('✅ 所有歌词加载完成', 'success');
             }
 
-            // 生成全部歌词文本，每首歌以制表符分隔原文和译文
             let text = '';
             currentSongs.forEach((song, index) => {
                 const data = currentLyrics[song.id];
@@ -913,7 +900,6 @@
             });
         }
 
-        // 单独加载全部歌词（不复制）
         async function loadAllLyrics() {
             if (currentSongs.length === 0) {
                 showToast('没有歌曲', 'error');
@@ -964,21 +950,15 @@
         //  导出 CSV（按行拆分）
         // ================================================================
 
-        function exportCsv() {
+        async function exportCsv() {
             if (currentSongs.length === 0) {
                 showToast('没有歌曲可导出，请先选择专辑', 'error');
                 return;
             }
 
-            // 先确保所有歌词已加载
             const unloaded = currentSongs.filter(song => !currentLyrics[song.id]);
             if (unloaded.length > 0) {
                 showToast(`⏳ 正在加载剩余 ${unloaded.length} 首歌词，请稍候...`, 'info');
-                // 同步加载所有未加载的歌词（这里复用 loadAllLyrics 的逻辑，但需等待完成）
-                // 为简便，我们直接调用 loadAllLyrics 并等待完成，但它是异步，我们可在此处用 await 调用
-                // 但由于我们已经在 async 函数中，可以 await
-                // 但 loadAllLyrics 内部有 toast 提示，我们直接调用并等待
-                // 为避免重复代码，我们直接在这里加载
                 for (const song of unloaded) {
                     try {
                         const { lrc, tlyric } = await getLyricsWithTranslation(song.id);
@@ -1011,19 +991,15 @@
                 showToast('✅ 所有歌词加载完成', 'success');
             }
 
-            // 构建 CSV 行，按行拆分歌词
             const rows = [];
-            // 表头
             rows.push(['序号', '歌名', '行号', '原文行', '译文行']);
 
             currentSongs.forEach((song, idx) => {
                 const data = currentLyrics[song.id];
                 const lyricText = data?.lyric || '';
                 const transText = data?.translation || '';
-                // 按换行拆分行
                 const lyricLines = lyricText.split('\n').filter(line => line.trim() !== '');
                 const transLines = transText.split('\n').filter(line => line.trim() !== '');
-                // 取两者最大行数，不足的留空
                 const maxLines = Math.max(lyricLines.length, transLines.length);
                 for (let i = 0; i < maxLines; i++) {
                     const lyricLine = lyricLines[i] || '';
@@ -1032,7 +1008,6 @@
                 }
             });
 
-            // 生成 CSV 字符串
             const csvContent = rows.map(row =>
                 row.map(cell => {
                     if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
@@ -1064,7 +1039,7 @@
         copyAllBtn.addEventListener('click', copyAllLyrics);
         loadAllBtn.addEventListener('click', loadAllLyrics);
 
-        console.log('🎵 音像采购工作台 v3.1 已加载');
+        console.log('🎵 音像采购工作台 v3.2 已加载');
         console.log('📡 API地址:', API_BASE);
         console.log('🌐 翻译服务:', TRANSLATE_PROXY);
     </script>
